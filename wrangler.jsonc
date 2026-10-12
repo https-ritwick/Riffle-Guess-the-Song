@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "encore-music-quiz",
+  "name": "riffle",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-09-01",
   "assets": {
@@ -19,7 +19,7 @@
   ],
   "d1_databases": [
     // Accounts, groups and group game history.
-    { "binding": "DB", "database_name": "encore-db", "database_id": "e92ec55c-0b15-4709-b0a2-3c55d98bf674", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "riffle-db", "database_id": "69221638-02ac-4f48-9d92-b094a8b927c1", "migrations_dir": "migrations" }
   ],
   "ratelimits": [
     { "name": "CREATE_LIMITER", "namespace_id": "4101", "simple": { "limit": 20, "period": 60 } },

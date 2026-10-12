@@ -2,9 +2,9 @@
 
 A free, real-time music quiz. Play **solo** or create a room and share the link so everyone plays from their own phone. The same clip plays on every device at once. Players pick the right title (or artist) from four look-alike options, each shown with album art, and faster correct answers score more. **Blend** mixes every player's Spotify top tracks (or a playlist each) into one game. Playing needs no account; signing in with Google adds saved **groups** with a shared leaderboard.
 
-> Riffle was previously called *Encore*. Only the user-facing name changed (`src/shared/brand.ts`). The Worker name, the D1 database (`encore-db`), cookie names and local-storage keys keep their old identifiers, so deployed data, sessions and saved seats keep working.
+> Riffle was previously called *Encore*. The product name lives in `src/shared/brand.ts`. Cookie names and local-storage keys still use the old `encore` prefix; they're internal and invisible to players.
 
-Live: https://encore-music-quiz.ggsipuedc.workers.dev
+Live: https://riffle.musicquiz.workers.dev
 
 The original gameplay screen was modelled on the public parts of [Tapzz](https://app.tapzz.com/) (see [Reference & fidelity](#reference--fidelity)). Riffle is an independent implementation with its own name and logo.
 
@@ -164,7 +164,7 @@ Requirements: Node.js 22.6+ (tested on Node 24).
 ```bash
 npm install
 cp .dev.vars.example .dev.vars                       # enables the local "developer sign-in"
-npx wrangler d1 migrations apply encore-db --local   # create the local database
+npx wrangler d1 migrations apply riffle-db --local   # create the local database
 npm run dev                                          # http://localhost:5290
 ```
 
@@ -177,7 +177,7 @@ npm run typecheck    # TypeScript for client and worker
 npm test             # unit tests
 npm run test:e2e     # Playwright end-to-end tests against the production build (uses installed Edge)
 LIVE=1 npx playwright test live                                   # real iTunes songs
-PW_BASE_URL=https://encore-music-quiz.ggsipuedc.workers.dev npx playwright test   # test the deployed site
+PW_BASE_URL=https://riffle.musicquiz.workers.dev npx playwright test   # test the deployed site
 npm run covers       # regenerate real tile artwork (paced, ~7 min)
 ```
 
@@ -191,14 +191,14 @@ npm run covers       # regenerate real tile artwork (paced, ~7 min)
 | `SPOTIFY_CLIENT_SECRET` | Worker secret | Spotify app client secret |
 | `DEV_LOGIN` | `.dev.vars` only | `true` enables developer sign-in on localhost. Never set in production. |
 
-Bindings (in `wrangler.jsonc`): `ROOMS` (Durable Object), `DB` (D1 `encore-db`), `CREATE_LIMITER` / `CONNECT_LIMITER` (rate limits), `ASSETS`.
+Bindings (in `wrangler.jsonc`): `ROOMS` (Durable Object), `DB` (D1 `riffle-db`), `CREATE_LIMITER` / `CONNECT_LIMITER` (rate limits), `ASSETS`.
 
 ## Deploy (free)
 
 ```bash
 npx wrangler login                                     # once
-npx wrangler d1 create encore-db                       # once; put the id in wrangler.jsonc
-npx wrangler d1 migrations apply encore-db --remote    # whenever migrations change
+npx wrangler d1 create riffle-db                       # once; put the id in wrangler.jsonc
+npx wrangler d1 migrations apply riffle-db --remote    # whenever migrations change
 npm run deploy
 ```
 
@@ -210,8 +210,8 @@ npm run deploy
    - keep the default scopes (`openid`, `email`, `profile`);
    - click **Publish app** so any Google account can sign in. These basic scopes need no verification.
 3. Go to **APIs & Services → Credentials → Create credentials → OAuth client ID** and choose *Web application*:
-   - Authorized JavaScript origin: `https://encore-music-quiz.ggsipuedc.workers.dev`
-   - Authorized redirect URI: `https://encore-music-quiz.ggsipuedc.workers.dev/api/auth/google/callback`
+   - Authorized JavaScript origin: `https://riffle.musicquiz.workers.dev`
+   - Authorized redirect URI: `https://riffle.musicquiz.workers.dev/api/auth/google/callback`
 4. Store the two values as Worker secrets. Each command asks you to paste the value:
 
 ```bash
@@ -228,7 +228,7 @@ Sign-in starts working immediately, with no redeploy needed.
 Without it, Blend still works: players add a playlist link instead.
 
 1. Open https://developer.spotify.com/dashboard and create an app. Select *Web API*.
-2. Add the redirect URI `https://encore-music-quiz.ggsipuedc.workers.dev/api/spotify/callback`.
+2. Add the redirect URI `https://riffle.musicquiz.workers.dev/api/spotify/callback`.
    - For local testing, add `http://127.0.0.1:5290/api/spotify/callback` and open the app at `http://127.0.0.1:5290`. Spotify doesn't accept `localhost`.
 3. Store the app's credentials as Worker secrets, and apply the new migration:
 
@@ -239,7 +239,7 @@ npx wrangler secret put SPOTIFY_CLIENT_ID
 npx wrangler secret put SPOTIFY_CLIENT_SECRET
 ```
 ```bash
-npx wrangler d1 migrations apply encore-db --remote
+npx wrangler d1 migrations apply riffle-db --remote
 ```
 
 **Development-mode limit:** new Spotify apps run in *development mode*, where only Spotify accounts you add under the app's **User Management** can connect (up to 25). Anyone else sees a message suggesting a playlist link instead. Wider access requires Spotify's extended-quota approval.

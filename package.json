@@ -15,8 +15,8 @@
     "deploy": "vite build && wrangler deploy",
     "covers": "node scripts/build-covers.mjs",
     "og": "node scripts/build-og.mjs",
-    "db:migrate:local": "wrangler d1 migrations apply encore-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply encore-db --remote"
+    "db:migrate:local": "wrangler d1 migrations apply riffle-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply riffle-db --remote"
   },
   "engines": {
     "node": ">=20"

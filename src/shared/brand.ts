@@ -1,6 +1,6 @@
-// User-facing product name in one place. Internal identifiers (worker name, D1
-// database, cookie and storage prefixes) intentionally keep their original
-// names so deployed data, sessions and saved seats survive the rebrand.
+// User-facing product name in one place. Cookie and local-storage prefixes keep
+// the original "encore" name; they're internal and changing them would log
+// everyone out and forget saved seats.
 export const BRAND = {
   name: 'Riffle',
   tagline: 'Name the song before your friends do.',
