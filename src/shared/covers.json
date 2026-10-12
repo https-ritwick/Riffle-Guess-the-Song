@@ -1,0 +1,232 @@
+{
+  "presets": {
+    "top-songs": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/e0/a2/b4/e0a2b443-7969-b57a-a591-cb6172c10aa7/198704943959_Cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/83/b3/69/83b3694e-974a-d50b-3eb9-2efd4e66143e/820233486484.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/47/20/98/472098ba-3557-4af7-42c2-55df4e874fe6/8902633457058.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/58/ed/ec/58edec97-1e57-922f-9be9-2dd70a896249/3788ea5e-6edd-4ae2-b6b5-03d8aabdcfe3.jpg/300x300bb.jpg"
+    ],
+    "chart-bollywood": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/47/20/98/472098ba-3557-4af7-42c2-55df4e874fe6/8902633457058.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/74/b6/95/74b69546-42ce-b146-de43-2e66807234ec/199806576946.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/9d/e5/30/9de5309c-695d-860b-86aa-98d79800d6bb/5054197132803.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/bb/23/ee/bb23eeed-0c35-4f1d-2b11-485622777ae4/8902894353007_cover.jpg/300x300bb.jpg"
+    ],
+    "chart-pop": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/e0/a2/b4/e0a2b443-7969-b57a-a591-cb6172c10aa7/198704943959_Cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/69/10/8a/69108a18-55ec-d774-a653-90b2242733db/199538765458.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/66/d9/ad/66d9ad66-7a21-5de5-bad0-3130997a7057/26UM1IM31399.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/5f/f8/a5/5ff8a59a-5b12-b177-9fe0-295345e93765/26UMGIM78044.rgb.jpg/300x300bb.jpg"
+    ],
+    "chart-hiphop": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/c5/b7/2f/c5b72ff4-d593-ed4c-f7ed-080fb4d224aa/081227911560.png/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/5d/f0/76/5df07610-c24f-e25d-34ae-5398fcdbd6db/199479627785_JJdFbic-copy-117c85a3.png/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/4b/30/2c/4b302cb6-7a14-5464-4e97-0577e9d0be49/18UMGIM82277.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/14/42/a0/1442a084-36ea-09a0-ff87-d5aea0cc19f8/mzi.ktgesuhn.jpg/300x300bb.jpg"
+    ],
+    "chart-rock": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/07/bb/84/07bb846c-eaea-b26a-aebd-ba911351a35b/00823375244738_Cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/2e/94/95/2e9495d7-dfe3-ddc8-87ef-6ef797a60218/850007452056.png/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Features114/v4/fc/c2/f8/fcc2f850-1d81-7440-c0a0-de7fcef1e911/dj.rrgizfic.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/88/16/2c/88162c3d-46db-8321-61f3-3a47404cfe76/075596050920.jpg/300x300bb.jpg"
+    ],
+    "chart-dance": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/d5/ad/da/d5adda6b-65f4-755a-05ab-f33a4e0e4cdd/artwork.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/08/03/7f/08037f7d-6173-9348-991d-5966f0686539/artwork.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/5b/73/3a/5b733a6d-4234-abbb-4c82-5282657b5c2d/193436473040.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/af/6e/e0/af6ee091-f9dd-09f1-076d-1d4807c8a9de/8721639132260.png/300x300bb.jpg"
+    ],
+    "chart-country": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/e2/91/4d/e2914d0a-7f1d-f04c-fbf4-c50b38548838/196873638690.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/5d/d3/1c/5dd31c9c-1e1c-0bbc-104f-4a42e2bb4c59/075679556424.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/7c/de/5e/7cde5e7a-612d-9714-d34c-1eb234c85ebb/810129961546.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/9f/8d/52/9f8d52a0-b6d9-d038-327b-4fe58bedce67/26UMGIM94572.rgb.jpg/300x300bb.jpg"
+    ],
+    "chart-latin": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/77/47/fc/7747fc1e-8167-5de6-b8e7-cf9b1038aea3/882436183713_cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/2b/66/b2/2b66b26c-ab23-faa1-c4ee-06fa2cce8f76/26UM1IM00558.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/2c/53/d0/2c53d034-b575-801d-570e-dacbc2a8c219/196874731246.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/1c/5d/9c/1c5d9cd7-465f-4625-1597-d041edaf7070/823375476696_Cover.jpg/300x300bb.jpg"
+    ],
+    "chart-tamil": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/83/b3/69/83b3694e-974a-d50b-3eb9-2efd4e66143e/820233486484.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/f8/01/3f/f8013f5d-17c4-eb98-7792-dd7697d022f6/820233938853.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/41/c3/e8/41c3e832-58d1-9b4f-5465-c4294a519e4f/cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/b1/b6/b9/b1b6b940-234c-9d72-92db-1cd2c805e8d0/885288660784.jpg/300x300bb.jpg"
+    ],
+    "chart-telugu": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/0d/f0/1a/0df01a3c-030d-aa0a-8008-62a0d352a86e/885288249965.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/20/87/74/208774ab-c3e5-3482-bdcf-82f8cdf1a2ab/8903431211552_cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/05/0b/a9/050ba9cc-78d4-e82b-b5a5-13d2fdeb38a1/cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/c5/07/f0/c507f090-239d-86a2-59fa-c8dd9cff6f25/885288703719.jpg/300x300bb.jpg"
+    ],
+    "bollywood-hits": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/5d/65/89/5d6589ac-c640-3515-0327-efa185104d83/196873834856.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/c2/82/c6/c282c63f-876f-9c0c-14aa-204c000c1a01/8909024123752.png/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/9d/2b/48/9d2b48bb-fcba-913f-9e6b-f23e31a2c44a/8903431677259_cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/3d/c7/43/3dc74387-e7f4-2342-397c-4cf2037c69a5/8902894623223_cover.jpg/300x300bb.jpg"
+    ],
+    "bollywood-90s": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/44/75/1e/44751ec8-8b16-519f-b8f9-3aa85e00649e/885288571639.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/54/bf/16/54bf16a4-e56b-64aa-4afa-f5a122d1e283/849486008182_cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/7f/76/fd/7f76fdc5-388d-66be-9696-0e3a974bffe4/8909024123745.png/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/b1/2a/54/b12a5476-65db-75b9-be67-611bede2596e/8902894628464_cover.jpg/300x300bb.jpg"
+    ],
+    "bollywood-2000s": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/eb/1b/38/eb1b3835-41fd-de2e-2550-4e9780fa6443/8902894623056_cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/6c/aa/dc/6caadc6b-8c42-a122-b3e1-41e6f14f0c22/849486005921_cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/38/44/21/384421ca-69a0-83f2-0a34-88653d45db97/8901854001385.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/3d/c7/43/3dc74387-e7f4-2342-397c-4cf2037c69a5/8902894623223_cover.jpg/300x300bb.jpg"
+    ],
+    "retro-bollywood": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/18/2c/fd/182cfdb1-c27a-8d41-d58a-fca4ff017c69/06UMGIM37432.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/44/b3/f8/44b3f846-6e2f-100b-653e-93883e188ccc/191773209018.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/2b/db/a0/2bdba01f-7d80-8748-a9a6-1e4eca03941d/196626978615.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/ab/d9/7a/abd97a69-3c36-0763-0389-57ae8a8dac81/00044006490120.rgb.jpg/300x300bb.jpg"
+    ],
+    "punjabi": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/8a/89/e4/8a89e445-d2c6-f8ac-a828-27818b0c1afe/859749638209_cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/f1/57/9d/f1579d5f-4e4f-1235-e97c-fa725602c839/810105711448_cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/5a/ac/00/5aac005f-9403-70e4-bce0-cf452017476e/197189606472.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/f7/6d/78/f76d78c5-cc9c-f2d6-8603-ba690eaa5c7d/5064089826918_cover.jpg/300x300bb.jpg"
+    ],
+    "desi-hiphop": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/bf/e1/19/bfe1195d-18c3-4f40-0a18-19beef6de0ca/197190848762.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/e5/2d/5e/e52d5e9e-a1c5-fdaf-8102-58ad44d2f735/886449712588.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/d2/5e/7e/d25e7e4c-f25d-3770-54ae-d89821b7b26c/3617052451949.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/5b/db/e9/5bdbe939-92c8-df00-f942-2534813d0d06/cover.jpg/300x300bb.jpg"
+    ],
+    "indian-indie": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/60/d3/e9/60d3e9b3-4991-16bd-1468-ce522245c9e2/cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/02/e7/77/02e77709-a5f6-5470-9e5b-70a0d6ff45ed/25UM1IM13936.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/b4/ab/c3/b4abc3c3-bd25-b8cb-0011-4311e3f9497e/197189936111.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/d2/2c/47/d22c47c3-951b-778f-74d7-22b90ae33876/3615934129924.png/300x300bb.jpg"
+    ],
+    "south-hits": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/83/b3/69/83b3694e-974a-d50b-3eb9-2efd4e66143e/820233486484.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/68/f1/52/68f1523b-3c40-f2cc-7d4a-376642897adb/cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/c0/cb/87/c0cb876b-471b-abe7-d8b0-17f3c7c452fd/884977369298.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/5d/66/7a/5d667a79-b67b-19db-95db-69c985ae9f5e/884977467260.jpg/300x300bb.jpg"
+    ],
+    "decade-70s": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/60/f8/a6/60f8a6bc-e875-238d-f2f8-f34a6034e6d2/14UMGIM07615.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/94/a7/5f/94a75fd1-17da-3a38-42dc-c5e35bf56046/16UMGIM86639.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/51/50/2c/51502c9e-de70-1100-569e-6b50cec92150/196874612422.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/fb/07/22/fb0722ae-e0b7-1f4b-7066-ab6dd8f99bff/06UMGIM35178.rgb.jpg/300x300bb.jpg"
+    ],
+    "decade-80s": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/32/4f/fd/324ffda2-9e51-8f6a-0c2d-c6fd2b41ac55/074643811224.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/20/3c/f5/203cf53d-689e-528f-29d7-ba33758254aa/mzi.rotbotfl.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/ea/31/aa/ea31aab7-6f9c-36d1-b989-ce1242a7b309/196874853153.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music/c6/e1/c8/mzi.ixgzfcmc.jpg/300x300bb.jpg"
+    ],
+    "decade-90s": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/5f/6b/e9/5f6be919-1b9e-30ef-45b7-cc27fc428fd5/012414167224.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/cb/8a/8f/cb8a8fd9-a870-5dd9-aaaa-ecab748cdd33/13UABIM52141.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/51/73/28/5173280b-9b5e-c5e4-d3f8-a2612d044543/888880423368.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/95/fd/b9/95fdb9b2-6d2b-92a6-97f2-51c1a6d77f1a/00602527874609.rgb.jpg/300x300bb.jpg"
+    ],
+    "decade-2000s": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music/03/c5/d4/mzi.ldvrmhxt.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/ae/46/51/ae465169-b0a4-3c10-42a0-63e4448d1508/16UMGIM59230.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/08/23/fc/0823fcd9-cb44-695b-32bf-b3bf51d9f800/00606949351229.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/20/74/2d/20742d10-aae0-7a0c-0509-e8f611be5787/884977705362.jpg/300x300bb.jpg"
+    ],
+    "decade-2010s": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/15/e6/e8/15e6e8a4-4190-6a8b-86c3-ab4a51b88288/190295851286.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/49/3d/ab/493dab54-f920-9043-6181-80993b8116c9/19UMGIM53909.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/11/ae/f2/11aef294-f57c-bab9-c9fc-529162984e62/24UMGIM85348.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/f8/df/0a/f8df0ac9-ae76-9dae-86d3-4e913fc54fb1/634904152062.png/300x300bb.jpg"
+    ],
+    "decade-2020s": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/1d/1b/f9/1d1bf9b1-44c6-9a6c-6ffb-c158488c06ce/26UMGIM39303.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/3a/09/fa/3a09fabd-7a71-d0d7-3e6a-7f3c4c89014e/24UMGIM32304.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/92/9f/69/929f69f1-9977-3a44-d674-11f70c852d1b/24UMGIM36186.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/a6/91/da/a691dac7-4cb7-82f5-0eda-e37b96f63f55/075679610720.jpg/300x300bb.jpg"
+    ],
+    "genre-pop": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/49/3d/ab/493dab54-f920-9043-6181-80993b8116c9/19UMGIM53909.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/56/f4/96/56f49612-02dd-83f4-44fe-d2118cc70707/26UMGIM51129.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/6c/11/d6/6c11d681-aa3a-d59e-4c2e-f77e181026ab/190295092665.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/15/e6/e8/15e6e8a4-4190-6a8b-86c3-ab4a51b88288/190295851286.jpg/300x300bb.jpg"
+    ],
+    "genre-rap": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/08/23/fc/0823fcd9-cb44-695b-32bf-b3bf51d9f800/00606949351229.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/95/f5/87/95f587f7-21c3-d5f9-d81a-4350f9caa020/16UMGIM27643.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/50/c2/cc/50c2cc95-3658-9417-0d4b-831abde44ba1/24UM1IM28978.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/d2/2d/6b/d22d6b0f-68dd-0eeb-92b4-9b6f4a43e85f/886448047452.jpg/300x300bb.jpg"
+    ],
+    "genre-rock": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/51/50/2c/51502c9e-de70-1100-569e-6b50cec92150/196874612422.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/b9/c8/ef/b9c8ef42-bbc9-64df-11f8-717571f6730f/886443673458.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/56/47/b7/5647b700-6b9d-9e72-ec9f-51140b6d4492/00602567673781.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/5c/15/9b/5c159b27-95ca-b9a7-84e3-28e795fffd39/dj.kvkrpptq.jpg/300x300bb.jpg"
+    ],
+    "genre-metal": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/c6/9b/1d/c69b1ddb-f873-53b4-9fc9-87ca49af2062/21UMGIM48676.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/01/a0/67/01a067e2-8463-bdf0-54aa-e4c5af8dd962/825646128358.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/93/74/16/93741672-cedb-1850-dcd9-113a374336d6/4050538642872.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/43/3b/a9/433ba92d-79ed-6ddc-3436-0ba06a8c9fab/016861752309.jpg/300x300bb.jpg"
+    ],
+    "genre-kpop": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/40/d4/93/40d493e3-ac9e-1746-8d4c-f380f27c97cb/193483706238_Cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/6e/c8/57/6ec857a9-ab4e-d731-a854-0594df54edad/BP_HYLT_DS_4000_4000.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/7e/41/69/7e4169e8-8358-27ff-66b4-1564ec800abd/00602508875137_Cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/c0/05/aa/c005aa79-a3a7-6e28-48e2-4c5e72eff603/8809928957357_Cover.jpg/300x300bb.jpg"
+    ],
+    "genre-edm": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/35/4d/a0/354da058-972b-dcf9-feec-609895ba8cb2/14UMGIM56567.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/f6/86/f7/f686f726-a8d6-ed60-b012-02684566e901/dj.vifysolm.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/23/75/a2/2375a297-2afc-74e6-4677-634d3810d3d7/5099967938551.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/6e/1e/f0/6e1ef055-195a-bb73-d5a8-5926058366a5/8712944577525.png/300x300bb.jpg"
+    ],
+    "genre-rnb": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/db/28/e7/db28e7c3-f53a-76c8-eaa4-d92a22e4f160/23UMGIM72115.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/bd/3b/a9/bd3ba9fb-9609-144f-bcfe-ead67b5f6ab3/196589564931.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/20/74/2d/20742d10-aae0-7a0c-0509-e8f611be5787/884977705362.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/c2/07/c6/c207c6ee-e3f1-cad2-1259-69a3ebd08b5c/828765571227.jpg/300x300bb.jpg"
+    ],
+    "genre-latin": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/90/5e/7e/905e7ed5-a8fa-a8f3-cd06-0028fdf3afaa/199066342442.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/64/c1/30/64c1308e-c891-6492-12d2-292c73257047/17UM1IM08035.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/0d/b5/8a/0db58a8b-7b17-dd53-3464-116a415d0f49/196872648836.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/2f/66/f0/2f66f0f1-c3c2-9dc0-8391-04804cabc8cf/24CRGIM46808.rgb.jpg/300x300bb.jpg"
+    ],
+    "genre-country": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/5d/d3/1c/5dd31c9c-1e1c-0bbc-104f-4a42e2bb4c59/075679556424.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/7d/24/14/7d241439-671a-d957-9613-2f738f43a064/196589485991.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/ce/36/7f/ce367f3d-2a4f-46ee-1434-e3fbb52f1fc8/093624849797.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/a6/91/da/a691dac7-4cb7-82f5-0eda-e37b96f63f55/075679610720.jpg/300x300bb.jpg"
+    ],
+    "genre-movies": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/fc/ee/c0/fceec0ae-a090-e3c5-4610-6737e64ac37e/00050087343491.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/dd/2b/8d/dd2b8d84-e032-94d2-473a-3f8efd18fe36/dj.rwfgroxa.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/35/24/1b/35241b7c-a539-1cd1-a855-f656cb46f67d/16UMGIM75345.rgb.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/a6/63/54/a6635418-7d49-b237-d1c9-ba85fa57dbc6/075679886613.jpg/300x300bb.jpg"
+    ],
+    "genre-christmas": [
+      "https://is1-ssl.mzstatic.com/image/thumb/Music115/v4/85/c3/21/85c32113-1c4c-571c-7602-88f568d8081c/075679861016.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music124/v4/c6/b7/27/c6b727f7-3a32-6b43-cee2-05bb71daf1cf/dj.itfmdeif.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music126/v4/0c/bf/f1/0cbff16d-d6da-d799-f5ec-a8a8bf723333/5059435857920_Cover.jpg/300x300bb.jpg",
+      "https://is1-ssl.mzstatic.com/image/thumb/Music114/v4/eb/4a/f9/eb4af984-fc68-56ab-7b89-1d070c04e1dd/5099765318524.jpg/300x300bb.jpg"
+    ]
+  },
+  "playlists": {
+    "spotify:4Y3NZDQJePGNtIXx28M6uG": "https://mosaic.scdn.co/640/ab67616d00001e02108d10d84153ff78d2197f62ab67616d00001e02a08c7022ea424b2f048b46e9ab67616d00001e02b22e21de789378f223e1795fab67616d00001e02e810a88d506b30bdc0935247",
+    "spotify:51Wuh0Ev8wAQCAOOCpjcOW": "https://image-cdn-ak.spotifycdn.com/image/ab67706c0000da84859b48bcbff683baa578ea0d",
+    "spotify:3HQvntcJ6dfRhu0LpblSuZ": null,
+    "spotify:37i9dQZF1DX8xfQRRX1PDm": "https://i.scdn.co/image/ab67706f0000000299e454572d0578183d97ecc2",
+    "spotify:37i9dQZF1DX0XUfTFmNBRM": "https://i.scdn.co/image/ab67706f00000002cdb9f3aa5daf93253b072a55",
+    "spotify:37i9dQZF1DWXtlo6ENS92N": "https://i.scdn.co/image/ab67706f00000002fc392f1c1d0f9a1148b9fb8b",
+    "spotify:37i9dQZF1DWTwzVdyRpXm1": "https://i.scdn.co/image/ab67706f000000028eda81239e4f34b816077f6c",
+    "spotify:37i9dQZF1DX5cZuAHLNjGz": "https://i.scdn.co/image/ab67706f00000002cae3d8a9e4161b19d3142d23",
+    "spotify:0Gd0yQzB6wttuaLlawHlYI": "https://image-cdn-ak.spotifycdn.com/image/ab67706c0000da84212140d15baa01a159fa69d1",
+    "spotify:09nWEs2d4zbyjGXMaA8oiQ": "https://mosaic.scdn.co/640/ab67616d00001e0252fe6875028c892308ffc2f7ab67616d00001e026b047c1401c8c18a54e4377dab67616d00001e02712d7cc771c2d47f96be938cab67616d00001e02dc9563139ebc2a5597254664",
+    "spotify:37i9dQZF1DX5q67ZpWyRrZ": "https://i.scdn.co/image/ab67706f00000002656f14776fbb39aa2ae900f0",
+    "spotify:37i9dQZF1DXcBWIGoYBM5M": "https://i.scdn.co/image/ab67706f00000002526040498d89ec622e9d3495",
+    "spotify:37i9dQZF1DXbTxeAdrVG2l": "https://i.scdn.co/image/ab67706f000000021eb48d2e1cd771ef1c6abc39",
+    "spotify:37i9dQZF1DX4o1oenSJRJd": "https://i.scdn.co/image/ab67706f00000002043bfef44142136749fc2917",
+    "spotify:37i9dQZF1DWWMOmoXKqHTD": "https://i.scdn.co/image/ab67706f0000000292af799a11403259b8474500",
+    "apple:pl.0b6396cf63594f5cb834aff82520eb84": "https://is1-ssl.mzstatic.com/image/thumb/Features115/v4/eb/01/4d/eb014dbf-cb3e-0d3b-7415-3f336b6280b6/U0MtTVMtV1ctR2xvYmFsX0hpdHMtQURBTV9JRD0xNDY3MDY3NTY0LnBuZw.png/1200x630SC.DN01-60.jpg?l=en-GB"
+  }
+}

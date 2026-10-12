@@ -1,0 +1,12 @@
+# Copy to .dev.vars for local development.
+# Enables the "developer sign-in" button on http://localhost only (for testing groups without Google).
+DEV_LOGIN=true
+# Optional: real Google sign-in locally. Add http://localhost:5290/api/auth/google/callback
+# as an authorised redirect URI in your Google OAuth client.
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+# Optional: "Connect Spotify" for Blend games. Create an app at https://developer.spotify.com/dashboard
+# and add http://127.0.0.1:5290/api/spotify/callback as a redirect URI (Spotify does not accept "localhost"),
+# then open the app at http://127.0.0.1:5290 instead of localhost.
+SPOTIFY_CLIENT_ID=
+SPOTIFY_CLIENT_SECRET=

@@ -1,0 +1,35 @@
+# Dependencies & builds
+node_modules
+dist
+.wrangler
+
+# Secrets — never commit these. Copy .dev.vars.example to .dev.vars for local keys;
+# production keys live in Cloudflare (`npx wrangler secret put …`).
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Personal editor / assistant settings
+.claude/
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.code-workspace
+
+# Test output
+test-results
+playwright-report
+blob-report
+test-screens
+coverage
+
+# OS / logs
+*.log
+.DS_Store
+Thumbs.db
+desktop.ini
