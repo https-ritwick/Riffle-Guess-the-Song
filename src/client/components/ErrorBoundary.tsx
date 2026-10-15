@@ -16,7 +16,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
   render() {
     if (!this.state.error) return this.props.children
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-[#07060d] p-6 text-center text-white">
+      <div className="flex min-h-dvh items-center justify-center bg-[#0d0716] p-6 text-center text-white">
         <div className="max-w-sm">
           <p className="mb-2 text-5xl">🎬</p>
           <h1 className="mb-2 text-2xl font-black">“Picture abhi baaki hai…”</h1>

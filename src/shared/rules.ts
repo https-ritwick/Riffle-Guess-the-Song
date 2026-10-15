@@ -52,4 +52,12 @@ export const AVATARS = [
   { emoji: '🦉', bg: '#7c3aed' },
 ] as const
 
-export const REACTIONS = ['🔥', '😂', '😮', '👏', '😭', '🎉'] as const
+/** Quick reactions shown first; the rest open from the "more" button. */
+export const QUICK_REACTIONS = ['🔥', '😂', '😮', '👏', '😭', '🖕', '💀', '🎉'] as const
+export const REACTIONS = [
+  ...QUICK_REACTIONS,
+  '🤣', '😍', '🥵', '🤯', '😡', '🤡', '💯', '👀',
+  '🙏', '💃', '🕺', '🎶', '🫡', '😎', '🤌', '😤',
+  '🥲', '👑', '🐐', '🤦', '🙈', '❤️', '💔', '🤬',
+  '😈', '🥳', '😴', '🤮', '🫠', '🍿', '🚀', '🧢',
+] as const

@@ -82,6 +82,7 @@ class PreviewPlayer {
   }
 
   preload(url: string): void {
+    if (!url) return
     const a = this.audio()
     if (a.src !== url) {
       this.stopFade()
@@ -93,7 +94,7 @@ class PreviewPlayer {
 
   /** Start downloading `url` without touching what's playing, so it starts instantly later. */
   warm(url: string): void {
-    if (typeof Audio === 'undefined') return
+    if (typeof Audio === 'undefined' || !url) return
     this.warmer ??= new Audio()
     if (this.warmer.src === url) return
     this.warmer.preload = 'auto'
@@ -111,6 +112,8 @@ class PreviewPlayer {
 
   /** Play `url` starting `offsetSeconds` in (used to sync late joiners). */
   play(url: string, offsetSeconds = 0): void {
+    // Challenge rounds (dialogues, stars) have no clip: just let any music fade out.
+    if (!url) return this.stop()
     const a = this.audio()
     this.stopFade()
     this.applyVolume()

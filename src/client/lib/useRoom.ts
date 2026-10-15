@@ -145,7 +145,7 @@ export function useRoom(code: string) {
         case 'reaction': {
           const id = ++reactionId.current
           setReactions((r) => [...r.slice(-20), { id, from: msg.from, emoji: msg.emoji }])
-          window.setTimeout(() => setReactions((r) => r.filter((x) => x.id !== id)), 2600)
+          window.setTimeout(() => setReactions((r) => r.filter((x) => x.id !== id)), 3100)
           break
         }
       }

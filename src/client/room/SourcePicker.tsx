@@ -394,7 +394,7 @@ export function SourcePicker({ onSuggested }: { onSuggested?: (s: Source) => voi
           <button
             type="button"
             onClick={randomPreset}
-            className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-linear-to-r from-brand-500 to-violet-500 px-4 py-2 text-sm font-bold text-black hover:opacity-90"
+            className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-linear-to-r from-brand-400 to-rose-500 px-4 py-2 text-sm font-bold text-black hover:opacity-90"
           >
             <Shuffle className="h-4 w-4" /> Random
           </button>

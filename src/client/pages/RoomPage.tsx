@@ -67,7 +67,7 @@ function JoinCard({
   group: { id: string; name: string } | null
   solo: boolean
 }) {
-  const { me } = useAuth()
+  const { me, loading } = useAuth()
   const [name, setName] = useState(() => load('name') ?? me?.name.split(' ')[0]?.slice(0, 20) ?? '')
   useEffect(() => {
     if (me && !name) setName(me.name.split(' ')[0]!.slice(0, 20))
@@ -97,10 +97,18 @@ function JoinCard({
             )}
           </p>
           {group && (
-            <p className="mb-4 flex items-center gap-2 rounded-lg bg-violet-500/10 px-3 py-2 text-sm text-violet-100">
+            <p className="mb-4 flex items-center gap-2 rounded-lg bg-fuchsia-500/10 px-3 py-2 text-sm text-fuchsia-100">
               <Users className="h-4 w-4" /> {group.name} group game
             </p>
           )}
+          {group && !me && !loading ? (
+            <>
+              <h2 className="mb-2 text-2xl font-bold text-white">Sign in to join</h2>
+              <p className="mb-6 text-sm text-gray-400">Group games are for signed-in players, so wins land on the right person’s leaderboard.</p>
+              <SignInButton returnTo={`/r/${code}`} label="Sign in with Google to join" />
+            </>
+          ) : (
+          <>
           <h2 className="mb-2 text-2xl font-bold text-white">What should we call you?</h2>
           <p className="mb-6 text-sm text-gray-400">{solo ? 'It goes on your results and recap.' : 'This name is shown to everyone in the room.'}</p>
           <label htmlFor="player-name" className="sr-only">
@@ -121,12 +129,14 @@ function JoinCard({
               {error.message}
             </p>
           )}
-          {error?.code === 'members_only' && !me ? (
+          {(error?.code === 'members_only' || error?.code === 'signin_required') && !me ? (
             <SignInButton returnTo={`/r/${code}`} label="Sign in with Google to join" />
           ) : (
             <Button type="submit" variant="gradient" className="w-full" disabled={!name.trim()} loading={busy}>
               Join game <ArrowRight className="h-4 w-4" />
             </Button>
+          )}
+          </>
           )}
         </form>
       </Card>

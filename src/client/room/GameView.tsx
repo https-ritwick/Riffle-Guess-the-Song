@@ -1,25 +1,63 @@
 import clsx from 'clsx'
-import { ArrowRight, ExternalLink, Flag, Sparkles, Volume2, VolumeX, Zap } from 'lucide-react'
+import { ArrowRight, ExternalLink, Flag, Lock, Sparkles, Volume2, VolumeX, Zap } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { PublicPlayer, PublicRound } from '../../shared/protocol'
-import { MAX_STREAK_BONUS, REACTIONS, REVEAL_MS, STREAK_BONUS } from '../../shared/rules'
+import { CHALLENGE_QUESTION } from '../../shared/challenges'
+import type { PublicPlayer, PublicRound, QuestionMode } from '../../shared/protocol'
+import { MAX_STREAK_BONUS, REVEAL_MS, STREAK_BONUS } from '../../shared/rules'
 import { PlayerAvatar } from '../components/ui'
 import { player as audio, usePlayer } from '../lib/audio'
+import { findSongClip } from '../lib/itunes'
+import type { SongClip } from '../../shared/songs'
 import { playSfx, setSfxEnabled, useSfxEnabled, vibrate } from '../lib/sfx'
 import { difficultyLabel } from '../lib/source'
 import { useNow } from '../lib/useNow'
 import { useRoomContext } from './context'
+import { ReactionBar } from './Reactions'
 import { AnimatedNumber, Scoreboard } from './Scoreboard'
+
+/** Dialogue, star and emoji rounds have no clip while you answer. */
+export function isChallengeMode(mode: QuestionMode): boolean {
+  return mode !== 'title' && mode !== 'artist'
+}
+
+/**
+ * An emoji round's song once you're allowed to hear it (you cracked it, or it's
+ * revealed): from the server when it could fetch it, else looked up by this browser.
+ */
+function useEmojiSong(round: PublicRound | null): SongClip | null {
+  const find = round?.reveal?.find ?? round?.yourResult?.find ?? null
+  const key = find ? `${find.title}|${find.movie}` : ''
+  const [clip, setClip] = useState<{ key: string; clip: SongClip | null } | null>(null)
+  useEffect(() => {
+    if (!find || clip?.key === key) return
+    let live = true
+    void findSongClip(find).then((c) => live && setClip({ key, clip: c }))
+    return () => {
+      live = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+  return clip?.key === key ? clip.clip : null
+}
 
 /**
  * Plays the round's preview in sync with the server clock. The song keeps playing
  * through the reveal, and the next song is downloaded meanwhile so it starts the
  * moment the reveal's countdown ends.
  */
-function useRoundAudio(round: PublicRound | null, phase: string, serverNow: () => number) {
-  const key = round ? `${round.index}:${round.preview}` : ''
+function useRoundAudio(round: PublicRound | null, phase: string, serverNow: () => number, looked: SongClip | null) {
+  const revealSong = round && isChallengeMode(round.mode) ? round.reveal?.track.preview || (round.reveal ? (looked?.preview ?? '') : '') : ''
+  // Crack an emoji puzzle and its song starts right away, while the others are still thinking.
+  const earnedSong = round?.yourResult?.song || (round?.yourResult?.correct ? (looked?.preview ?? '') : '')
+  const key = round ? `${round.index}:${round.preview}:${revealSong}:${earnedSong}` : ''
   useEffect(() => {
     if (!round) return
+    if (isChallengeMode(round.mode)) {
+      const song = phase === 'reveal' ? revealSong || earnedSong : phase === 'question' ? earnedSong : ''
+      if (song) audio.ensurePlaying(song, 0)
+      else if (phase === 'question') audio.stop()
+      return
+    }
     const offset = round.clipOffset + Math.max(0, (serverNow() - round.startsAt) / 1000)
     if (phase === 'countdown') audio.preload(round.preview)
     else if (phase === 'question') audio.play(round.preview, offset)
@@ -110,8 +148,8 @@ function TimerRing({ progress, seconds, urgent }: { progress: number; seconds: n
         />
         <defs>
           <linearGradient id="ring-g" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stopColor="#12dcef" />
-            <stop offset="1" stopColor="#8b5cf6" />
+            <stop offset="0" stopColor="#ffc44d" />
+            <stop offset="1" stopColor="#ff6a3d" />
           </linearGradient>
         </defs>
       </svg>
@@ -123,7 +161,7 @@ function TimerRing({ progress, seconds, urgent }: { progress: number; seconds: n
 }
 
 /** During the reveal: counts down to the next song (or the results) while the song plays on. */
-function NextUp({ endsAt, now, last, double }: { endsAt: number | null; now: number; last: boolean; double: boolean }) {
+function NextUp({ endsAt, now, last, double, noun }: { endsAt: number | null; now: number; last: boolean; double: boolean; noun: string }) {
   if (!endsAt) return null
   const left = Math.max(0, endsAt - now)
   const progress = Math.min(1, left / REVEAL_MS)
@@ -134,12 +172,12 @@ function NextUp({ endsAt, now, last, double }: { endsAt: number | null; now: num
       <span className="relative inline-flex h-11 w-11 items-center justify-center">
         <svg viewBox="0 0 44 44" className="absolute inset-0 -rotate-90" aria-hidden="true">
           <circle cx="22" cy="22" r={r} fill="none" stroke="currentColor" strokeWidth="3.5" className="text-white/10" />
-          <circle cx="22" cy="22" r={r} fill="none" stroke="#a78bfa" strokeWidth="3.5" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - progress)} />
+          <circle cx="22" cy="22" r={r} fill="none" stroke="#ffae1f" strokeWidth="3.5" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - progress)} />
         </svg>
         <span className="relative text-base font-extrabold text-white tabular-nums">{Math.ceil(left / 1000)}</span>
       </span>
       <span className="text-left text-xs leading-tight text-gray-300">
-        {last ? 'Results' : double ? 'Final song · ×2' : 'Next song'}
+        {last ? 'Results' : double ? `Final ${noun} · ×2` : `Next ${noun}`}
         <span className="block text-gray-500">{last ? 'coming up' : 'starts in'}</span>
       </span>
     </div>
@@ -172,7 +210,7 @@ function VinylStage({ round, spinning }: { round: PublicRound; spinning: boolean
               {flipped && art ? (
                 <img src={art} alt="" className="h-full w-full object-cover" />
               ) : (
-                <div className="h-full w-full bg-linear-to-br from-brand-400 via-violet-500 to-pink-400" />
+                <div className="h-full w-full bg-linear-to-br from-brand-300 via-brand-500 to-rose-500" />
               )}
               <span className="absolute top-1/2 left-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black" />
             </div>
@@ -184,7 +222,7 @@ function VinylStage({ round, spinning }: { round: PublicRound; spinning: boolean
             <div className="backface-hidden absolute inset-0 overflow-hidden rounded-xl border border-white/10 bg-linear-to-br from-gray-800 via-gray-900 to-black shadow-2xl">
               <div className="sleeve-noise absolute inset-0 opacity-40" />
               <div className="relative flex h-full w-full flex-col items-center justify-center gap-2">
-                <span className="bg-linear-to-br from-brand-300 to-violet-400 bg-clip-text text-5xl font-black text-transparent sm:text-6xl">?</span>
+                <span className="bg-linear-to-br from-brand-200 to-rose-400 bg-clip-text text-5xl font-black text-transparent sm:text-6xl">?</span>
                 <Equalizer active={spinning} />
               </div>
             </div>
@@ -234,7 +272,105 @@ function VinylStage({ round, spinning }: { round: PublicRound; spinning: boolean
   )
 }
 
-const OPTION_TINTS = ['from-cyan-500/30', 'from-violet-500/30', 'from-pink-500/30', 'from-amber-500/30']
+const HYPE: Record<number, string> = { 3: '🔥 Hat-trick!', 4: '⚡ On fire!', 5: '💥 Unstoppable!', 7: '👑 Shahenshah mode!', 10: '🐐 Legendary!' }
+
+/** A big burst when you hit a streak milestone (or keep going past ten). */
+function StreakHype({ streak, round }: { streak: number; round: number }) {
+  const text = HYPE[streak] ?? (streak > 10 ? `🐐 ${streak} in a row!` : null)
+  if (!text) return null
+  return (
+    <div key={`${round}:${streak}`} aria-live="polite" className="pointer-events-none absolute inset-x-0 top-24 z-20 flex justify-center">
+      <span className="hype-burst rounded-full bg-linear-to-r from-brand-300 via-brand-500 to-rose-500 px-6 py-2.5 text-2xl font-black text-black shadow-2xl shadow-rose-500/40 sm:text-3xl">
+        {text} <span className="text-lg font-extrabold">{streak} in a row</span>
+      </span>
+    </div>
+  )
+}
+
+/** Which of a star round's clues are showing: one more every third of the timer. */
+function visibleClues(round: PublicRound, now: number): number {
+  const clues = round.challenge?.clues.length ?? 0
+  if (!clues || round.reveal) return clues
+  const total = round.endsAt - round.startsAt
+  const elapsed = Math.max(0, now - round.startsAt)
+  return Math.min(clues, 1 + Math.floor((elapsed / total) * clues))
+}
+
+/** The challenge to solve (a dialogue, emojis or clues), turning into the answer at the reveal. */
+function ChallengeStage({ round, now }: { round: PublicRound; now: number }) {
+  const c = round.challenge
+  const answer = round.reveal?.track
+  const shown = visibleClues(round, now)
+  if (!c) {
+    return (
+      <div className="space-y-3 pt-1" aria-hidden="true">
+        <div className="h-28 animate-pulse rounded-2xl bg-white/5" />
+        <div className="h-4 w-1/2 animate-pulse rounded bg-white/10" />
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-4">
+      <div className="film-strip relative overflow-hidden rounded-2xl bg-black/45 px-5 py-7 ring-1 ring-white/10 sm:px-6" data-testid="challenge-prompt">
+        <span className="absolute top-2.5 left-4 text-[10px] font-bold tracking-[0.3em] text-brand-200/80 uppercase">
+          {c.kind === 'dialogue' ? 'Dialogue' : c.kind === 'quote' ? 'Who said it?' : c.kind === 'emoji' ? 'Emoji song' : 'Clues'}
+        </span>
+        {c.ai && (
+          <span className="absolute top-2 right-3 inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-brand-100" title="Freshly written by AI for this room">
+            <Sparkles className="h-3 w-3" /> fresh
+          </span>
+        )}
+        {c.kind === 'emoji' ? (
+          <p className="animate-pop pt-3 text-center text-5xl leading-snug tracking-[0.15em] sm:text-6xl" aria-label={`Emoji clue: ${c.prompt}`}>
+            {c.prompt}
+          </p>
+        ) : c.kind === 'actor' ? (
+          <ol className="space-y-2 pt-3">
+            {c.clues.map((clue, i) => (
+              <li
+                key={i}
+                className={clsx(
+                  'flex gap-3 rounded-xl px-3 py-2 transition-all duration-500',
+                  i < shown ? 'bg-white/[0.07] text-white' : 'bg-white/[0.02] text-transparent select-none',
+                )}
+              >
+                <span className={clsx('mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-black', i < shown ? 'bg-brand-400 text-black' : 'bg-white/10 text-gray-500')}>
+                  {i < shown ? i + 1 : <Lock className="h-3 w-3" />}
+                </span>
+                <span className={clsx('leading-snug', i < shown ? 'animate-pop' : 'blur-sm')}>{i < shown ? clue : 'Next clue unlocks soon…'}</span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <blockquote className="animate-pop pt-3 text-center font-serif text-2xl leading-snug text-amber-50 italic sm:text-3xl">“{c.prompt}”</blockquote>
+        )}
+      </div>
+      {answer ? (
+        <div className="flex animate-pop items-center gap-4">
+          {answer.artwork && <img src={answer.artwork} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover shadow-xl ring-1 ring-white/10" />}
+          <div className="min-w-0">
+            <h3 className="text-xl leading-tight font-extrabold text-white sm:text-2xl" data-testid="reveal-title">
+              {answer.title}
+            </h3>
+            <p className="font-semibold text-brand-300">{answer.artist}</p>
+            {answer.album && (c.kind === 'emoji' ? <p className="mt-0.5 text-sm text-gray-300">{answer.album}</p> : <p className="mt-0.5 text-sm text-gray-400 italic">“{answer.album}”</p>)}
+            {answer.link && (
+              <a href={answer.link} target="_blank" rel="noreferrer noopener" className="mt-1 inline-flex items-center gap-1 text-xs text-gray-400 hover:text-white">
+                Listen on Apple Music <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+          </div>
+        </div>
+      ) : (
+        c.kind === 'actor' && (
+          <p className="text-xs text-gray-400">Answer early for more points — a new clue unlocks every few seconds.</p>
+        )
+      )}
+    </div>
+  )
+}
+
+const OPTION_TINTS = ['from-amber-500/30', 'from-fuchsia-500/30', 'from-pink-500/30', 'from-amber-500/30']
 
 function Choices({ round, players, onAnswer, locked }: { round: PublicRound; players: PublicPlayer[]; onAnswer: (i: number) => void; locked: boolean }) {
   const reveal = round.reveal
@@ -296,7 +432,7 @@ function Choices({ round, players, onAnswer, locked }: { round: PublicRound; pla
 }
 
 function Status({ phase, round, you, answeredCount, activeCount, solo }: { phase: string; round: PublicRound; you: string; answeredCount: number; activeCount: number; solo: boolean }) {
-  const question = round.mode === 'title' ? 'What’s the song?' : 'Who’s the artist?'
+  const question = round.challenge ? CHALLENGE_QUESTION[round.challenge.kind] : round.mode === 'title' ? 'What’s the song?' : round.mode === 'artist' ? 'Who’s the artist?' : 'Ready?'
   const waiting = solo ? null : (
     <span className="mt-1 block text-sm font-normal text-gray-400">
       Waiting for others ({answeredCount}/{activeCount})
@@ -355,10 +491,11 @@ function Penalty({ points }: { points: number }) {
 
 function CountdownOverlay({ round, now }: { round: PublicRound; now: number }) {
   const left = Math.max(1, Math.ceil((round.startsAt - now) / 1000))
+  const noun = isChallengeMode(round.mode) ? 'Question' : 'Song'
   return (
     <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center rounded-3xl bg-gray-950/85 backdrop-blur-md" aria-live="assertive">
       <p className="mb-2 text-sm font-semibold tracking-[0.25em] text-gray-400 uppercase">
-        Song {round.index + 1} of {round.total}
+        {noun} {round.index + 1} of {round.total}
       </p>
       {round.double && (
         <p className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-amber-400/20 px-3 py-1 text-sm font-extrabold text-amber-300">
@@ -366,8 +503,8 @@ function CountdownOverlay({ round, now }: { round: PublicRound; now: number }) {
         </p>
       )}
       <span className="relative flex h-40 w-40 items-center justify-center">
-        <span className="absolute inset-0 animate-ping rounded-full bg-violet-500/15" />
-        <span key={left} className="animate-pop bg-linear-to-br from-brand-300 via-violet-400 to-pink-400 bg-clip-text text-9xl font-black text-transparent tabular-nums">
+        <span className="absolute inset-0 animate-ping rounded-full bg-fuchsia-500/15" />
+        <span key={left} className="animate-pop bg-linear-to-br from-brand-200 via-brand-400 to-rose-400 bg-clip-text text-9xl font-black text-transparent tabular-nums">
           {left}
         </span>
       </span>
@@ -439,7 +576,7 @@ function SoloPanel({ me, marks, round, onNext, phase }: { me: PublicPlayer | und
           className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-white font-bold text-gray-900 hover:bg-gray-100"
           data-testid="next-song"
         >
-          {round.index + 1 < round.total ? 'Next song' : 'See results'} <ArrowRight className="h-4 w-4" />
+          {round.index + 1 < round.total ? (isChallengeMode(round.mode) ? 'Next question' : 'Next song') : 'See results'} <ArrowRight className="h-4 w-4" />
         </button>
       )}
     </section>
@@ -455,7 +592,13 @@ export function GameView() {
   const [pending, setPending] = useState<{ round: number; choice: number } | null>(null)
   const marks = useRoundMarks(round, you)
 
-  useRoundAudio(round, phase, serverNow)
+  const looked = useEmojiSong(round)
+  useRoundAudio(round, phase, serverNow, looked)
+  // Show the looked-up cover and link at the reveal too.
+  const shownRound = useMemo<PublicRound>(
+    () => (looked && round.reveal && !round.reveal.track.preview ? { ...round, reveal: { ...round.reveal, track: { ...round.reveal.track, artwork: looked.artwork, link: looked.link, preview: looked.preview } } } : round),
+    [round, looked],
+  )
 
   const localRound = useMemo<PublicRound>(() => {
     if (round.yourChoice === null && pending && pending.round === round.index && phase === 'question') {
@@ -494,7 +637,10 @@ export function GameView() {
   const totalMs = round.endsAt - round.startsAt
   const progress = phase === 'question' ? Math.max(0, Math.min(1, (round.endsAt - now) / totalMs)) : phase === 'countdown' ? 1 : 0
   const secondsLeft = Math.max(0, Math.ceil((round.endsAt - now) / 1000))
-  const reacting = phase === 'reveal' && !state.solo
+  const challenge = isChallengeMode(round.mode)
+  const noun = challenge ? 'question' : 'song'
+  // React at the reveal, or while you wait for others once you've answered.
+  const reacting = !state.solo && (phase === 'reveal' || (phase === 'question' && localRound.yourChoice !== null))
   const myPick = round.reveal?.picks[you]
   const outcome = localRound.yourResult
     ? { kind: localRound.yourResult.correct ? ('right' as const) : ('wrong' as const), points: localRound.yourResult.points }
@@ -511,14 +657,15 @@ export function GameView() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div>
           <div className="game-card relative overflow-hidden rounded-3xl border border-white/10 p-5 shadow-2xl sm:p-7">
-            {round.reveal?.track.artwork && <img src={round.reveal.track.artwork} alt="" aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-20 blur-3xl" />}
+            {shownRound.reveal?.track.artwork && <img src={shownRound.reveal.track.artwork} alt="" aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-20 blur-3xl" />}
             {phase === 'countdown' && <CountdownOverlay round={round} now={now} />}
+            {outcome?.kind === 'right' && <StreakHype streak={me?.streak ?? 0} round={round.index} />}
 
             <div className="relative">
               <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="text-base text-gray-300">
-                    Song{' '}
+                    {challenge ? 'Question' : 'Song'}{' '}
                     <span className="font-extrabold text-white" data-testid="round-number">
                       {round.index + 1}
                     </span>{' '}
@@ -550,14 +697,14 @@ export function GameView() {
                   </div>
                   {phase === 'question' && <Equalizer active={playing} className="h-6" />}
                   {phase === 'reveal' && (
-                    <NextUp endsAt={state.phaseEndsAt} now={now} last={round.index + 1 >= round.total} double={doubleNext} />
+                    <NextUp endsAt={state.phaseEndsAt} now={now} last={round.index + 1 >= round.total} double={doubleNext} noun={noun} />
                   )}
                 </div>
               </div>
 
-              <div className="flex flex-col gap-5 sm:gap-7 xl:flex-row">
-                <div className="xl:w-[40%]">
-                  <VinylStage round={round} spinning={playing && phase !== 'countdown'} />
+              <div className={clsx('flex flex-col gap-5 sm:gap-7', !challenge && 'xl:flex-row')}>
+                <div className={challenge ? '' : 'xl:w-[40%]'}>
+                  {challenge ? <ChallengeStage round={shownRound} now={now} /> : <VinylStage round={round} spinning={playing && phase !== 'countdown'} />}
                 </div>
                 <div key={`${round.index}:${outcome?.kind ?? ''}`} className={clsx('relative flex-1', outcome?.kind === 'wrong' && 'animate-shake')}>
                   <Choices round={localRound} players={state.players} onAnswer={answer} locked={locked} />
@@ -569,20 +716,7 @@ export function GameView() {
                 </div>
               </div>
 
-              {reacting && (
-                <div className="mt-6 flex flex-wrap items-center justify-center gap-2 border-t border-white/5 pt-5" aria-label="Send a reaction">
-                  {REACTIONS.map((emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      onClick={() => send({ t: 'react', emoji })}
-                      className="rounded-full bg-white/5 px-3 py-1.5 text-xl transition-transform hover:scale-110 hover:bg-white/10 active:scale-95"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {reacting && <ReactionBar className="mt-6 border-t border-white/5 pt-5" />}
             </div>
           </div>
 

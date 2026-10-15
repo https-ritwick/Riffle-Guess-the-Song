@@ -11,6 +11,8 @@ interface __BaseEnv_Env {
 	GOOGLE_CLIENT_SECRET: string;
 	SPOTIFY_CLIENT_ID: string;
 	SPOTIFY_CLIENT_SECRET: string;
+	GEMINI_API_KEY: string;
+	GEMINI_MODEL: string;
 	ROOMS: DurableObjectNamespace<import("./index").GameRoom>;
 }
 declare namespace Cloudflare {
@@ -25,7 +27,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "DEV_LOGIN" | "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "SPOTIFY_CLIENT_ID" | "SPOTIFY_CLIENT_SECRET">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "DEV_LOGIN" | "GOOGLE_CLIENT_ID" | "GOOGLE_CLIENT_SECRET" | "SPOTIFY_CLIENT_ID" | "SPOTIFY_CLIENT_SECRET" | "GEMINI_API_KEY" | "GEMINI_MODEL">> {}
 }
 declare module "*.txt" {
 	const value: string;

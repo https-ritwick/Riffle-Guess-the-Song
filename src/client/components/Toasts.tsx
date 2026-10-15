@@ -52,7 +52,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                     t.action!.onClick()
                     dismiss(t.id)
                   }}
-                  className="mt-2 rounded-lg bg-linear-to-r from-brand-500 to-violet-500 px-3 py-1.5 text-sm font-bold text-black"
+                  className="mt-2 rounded-lg bg-linear-to-r from-brand-400 to-rose-500 px-3 py-1.5 text-sm font-bold text-black"
                 >
                   {t.action.label}
                 </button>

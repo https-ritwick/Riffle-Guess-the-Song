@@ -86,7 +86,9 @@ test('two friends play a full game in real time', async ({ browser }) => {
   expect(hostScore).toBeGreaterThanOrEqual(5 * 500)
   await expect(guest.page.getByTestId('final-score')).toHaveText('0')
   await expect(host.page.getByTestId('standings').locator('li').first()).toContainText('Asha')
-  await expect(host.page.getByTestId('awards')).toContainText('Dhoom Machale')
+  // Award names change every game; the winners and what they won for don't.
+  await expect(host.page.getByTestId('awards')).toContainText(/Asha\s*\d\.\d\ds on /)
+  expect(await host.page.getByTestId('awards').locator('li').count()).toBeGreaterThanOrEqual(3)
   await expect(host.page.getByTestId('footer')).toContainText('Made with')
   await expect(guest.page.getByText('You got 0/5 songs right.')).toBeVisible()
   await host.page.screenshot({ path: 'test-screens/results-host.png', fullPage: true })

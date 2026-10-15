@@ -11,18 +11,18 @@ export function LogoMark({ className }: { className?: string }) {
     <svg viewBox="0 0 64 64" aria-hidden="true" className={className}>
       <defs>
         <linearGradient id="logo-g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#12dcef" />
-          <stop offset="0.55" stopColor="#8b5cf6" />
-          <stop offset="1" stopColor="#f472b6" />
+          <stop offset="0" stopColor="#ffc44d" />
+          <stop offset="0.55" stopColor="#ff6a3d" />
+          <stop offset="1" stopColor="#e8336d" />
         </linearGradient>
       </defs>
-      <circle cx="32" cy="32" r="30" fill="#0b0a14" />
+      <circle cx="32" cy="32" r="30" fill="#140b1f" />
       <circle cx="32" cy="32" r="30" fill="none" stroke="url(#logo-g)" strokeWidth="2.5" />
       <circle cx="32" cy="32" r="23.5" fill="none" stroke="#ffffff" strokeOpacity="0.09" strokeWidth="1.2" />
       <circle cx="32" cy="32" r="19" fill="none" stroke="#ffffff" strokeOpacity="0.09" strokeWidth="1.2" />
       <path d="M32 8.5a23.5 23.5 0 0 1 22.3 16" fill="none" stroke="url(#logo-g)" strokeWidth="3" strokeLinecap="round" />
       <circle cx="32" cy="32" r="12" fill="url(#logo-g)" />
-      <path d="M29 26.5v11l8.5-5.5z" fill="#0b0a14" />
+      <path d="M29 26.5v11l8.5-5.5z" fill="#140b1f" />
     </svg>
   )
 }
@@ -39,9 +39,10 @@ export function Logo({ size = 'lg' }: { size?: 'sm' | 'lg' }) {
 type Variant = 'white' | 'gradient' | 'dark' | 'danger'
 
 const VARIANTS: Record<Variant, string> = {
-  white: 'bg-white text-gray-900 font-semibold text-[15px] hover:bg-gray-100',
-  gradient: 'bg-linear-to-r from-brand-500 via-violet-500 to-pink-400 text-black font-bold hover:opacity-90 shadow-lg shadow-violet-500/20',
-  dark: 'bg-gray-800 border border-gray-700 text-white font-semibold hover:bg-gray-700',
+  white: 'bg-white text-gray-900 font-semibold text-[15px] hover:bg-brand-50',
+  gradient:
+    'bg-linear-to-r from-brand-300 via-brand-500 to-rose-500 text-black font-bold shadow-lg shadow-rose-500/25 hover:brightness-110 hover:shadow-rose-500/40 active:scale-[0.98]',
+  dark: 'bg-white/[0.06] border border-white/10 text-white font-semibold hover:bg-white/[0.1] hover:border-white/20',
   danger: 'bg-red-600/90 text-white font-semibold hover:bg-red-600',
 }
 
@@ -58,7 +59,7 @@ export function Button({ variant = 'white', loading, icon, size = 'md', classNam
       {...rest}
       disabled={disabled || loading}
       className={clsx(
-        'relative flex items-center justify-center gap-2 rounded-xl transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        'relative flex items-center justify-center gap-2 rounded-xl transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50',
         size === 'md' ? 'h-12 px-4' : 'h-9 px-3 text-sm',
         VARIANTS[variant],
         className,
@@ -76,7 +77,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
       ref={ref}
       {...rest}
       className={clsx(
-        'h-12 w-full rounded-xl border border-gray-700 bg-gray-800/80 px-4 text-white outline-none placeholder:text-gray-500 focus:border-brand-500',
+        'h-12 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 text-white outline-none transition placeholder:text-gray-500 focus:border-brand-400 focus:bg-white/[0.08] focus:ring-2 focus:ring-brand-400/20',
         className,
       )}
     />
@@ -84,7 +85,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
 })
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={clsx('rounded-3xl border border-white/10 bg-white/[0.035] p-5 backdrop-blur-sm', className)}>{children}</div>
+  return <div className={clsx('glass rounded-3xl p-5 backdrop-blur-sm', className)}>{children}</div>
 }
 
 export function Avatar({ index, size = 'md', dim }: { index: number; size?: 'sm' | 'md' | 'lg'; dim?: boolean }) {

@@ -1,7 +1,7 @@
 import clsx from 'clsx'
-import { Check, Link2, ListMusic, Loader2, RefreshCw, Sparkles, X } from 'lucide-react'
+import { Check, Link2, ListMusic, Loader2, Plus, RefreshCw, Sparkles, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import type { BlendEntry, PublicPlayer, Source } from '../../shared/protocol'
+import { MAX_BLEND_PER_PLAYER, MAX_BLEND_SOURCES, type BlendEntry, type BlendSource, type PublicPlayer, type Source } from '../../shared/protocol'
 import { useToast } from '../components/Toasts'
 import { SpotifyIcon } from '../components/SpotifyIcon'
 import { Button, Input, PlayerAvatar } from '../components/ui'
@@ -15,8 +15,8 @@ export function BlendOrb({ players, size = 'md' }: { players: PublicPlayer[]; si
   const shown = players.slice(0, 4)
   return (
     <span className={clsx('relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-2xl', box)} aria-hidden="true">
-      <span className="absolute inset-0 bg-linear-to-br from-emerald-400 via-violet-500 to-pink-500" />
-      <span className="blend-blob absolute -top-1/4 -left-1/4 h-3/4 w-3/4 rounded-full bg-cyan-300/70 blur-xl" />
+      <span className="absolute inset-0 bg-linear-to-br from-emerald-400 via-fuchsia-500 to-pink-500" />
+      <span className="blend-blob absolute -top-1/4 -left-1/4 h-3/4 w-3/4 rounded-full bg-amber-300/70 blur-xl" />
       <span className="blend-blob absolute -right-1/4 -bottom-1/4 h-3/4 w-3/4 rounded-full bg-fuchsia-400/70 blur-xl [animation-delay:-3s]" />
       {shown.length > 0 ? (
         <span className="relative flex -space-x-2">
@@ -33,8 +33,13 @@ export function BlendOrb({ players, size = 'md' }: { players: PublicPlayer[]; si
   )
 }
 
-function viaLabel(e: BlendEntry): string {
+function viaLabel(e: BlendSource): string {
   return e.via === 'spotify' ? `Spotify · ${e.label}` : e.label
+}
+
+function sourcesLabel(e: BlendEntry): string {
+  const sources = e.sources?.length ? e.sources : [e]
+  return sources.length === 1 ? viaLabel(sources[0]!) : `${viaLabel(sources[0]!)} + ${sources.length - 1} more`
 }
 
 /** After returning from Spotify's sign-in, add the listener's top tracks once. */
@@ -65,11 +70,15 @@ export function BlendPanel({ current, readOnly, onPick }: { current: Source; rea
   const toast = useToast()
   const { config, me, refresh } = useSpotify()
   const [busy, setBusy] = useState<'spotify' | 'playlist' | null>(null)
+  const [found, setFound] = useState(0)
   const [showLink, setShowLink] = useState(false)
   const [link, setLink] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   const mine = state.blend.find((b) => b.playerId === you)
+  const mySources = mine ? (mine.sources?.length ? mine.sources : [mine]) : []
+  const hasSpotify = mySources.some((s) => s.via === 'spotify')
+  const canAdd = mySources.length < MAX_BLEND_SOURCES && (mine?.count ?? 0) < MAX_BLEND_PER_PLAYER
   const entries = state.blend.filter((b) => state.players.some((p) => p.id === b.playerId))
   const contributors = entries.map((e) => state.players.find((p) => p.id === e.playerId)!).filter(Boolean)
   const total = entries.reduce((n, e) => n + e.count, 0)
@@ -78,15 +87,16 @@ export function BlendPanel({ current, readOnly, onPick }: { current: Source; rea
   const addSpotify = async () => {
     setError(null)
     setBusy('spotify')
+    setFound(0)
     try {
       const fresh = me?.connected ? me : await fetch('/api/spotify/me').then((r) => r.json())
       if (!fresh?.connected) {
         connectSpotify(location.pathname)
         return
       }
-      const tracks = await spotifyBlendTracks(fresh)
+      const tracks = await spotifyBlendTracks(fresh, setFound)
       send({ t: 'blend', via: 'spotify', label: fresh.name, ...(fresh.image ? { image: fresh.image } : {}), tracks })
-      toast({ title: 'Added to the Blend', body: `${tracks.length} of your top tracks are in.`, tone: 'success', durationMs: 3500 })
+      toast({ title: 'Added to the Blend', body: `${tracks.length} of your songs are in — a fresh mix every time you refresh.`, tone: 'success', durationMs: 3500 })
     } catch (err) {
       setError(err instanceof MusicError ? err.message : 'Could not read your Spotify right now.')
     } finally {
@@ -113,14 +123,14 @@ export function BlendPanel({ current, readOnly, onPick }: { current: Source; rea
 
   return (
     <div className="space-y-5" data-testid="blend-panel">
-      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-emerald-500/15 via-violet-600/15 to-pink-500/15 p-5">
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-linear-to-br from-emerald-500/15 via-fuchsia-600/15 to-pink-500/15 p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <BlendOrb players={contributors} size="lg" />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-bold tracking-[0.2em] text-emerald-300 uppercase">Blend</p>
             <h3 className="text-2xl font-extrabold text-white">Everyone’s music, one game</h3>
             <p className="mt-1 text-sm text-gray-300">
-              Each player adds their Spotify top tracks or a playlist. Songs are mixed fairly, and every reveal shows <span className="font-semibold text-white">whose song it was</span>.
+              Each player adds their Spotify (up to {MAX_BLEND_PER_PLAYER} songs) and playlists. Songs are mixed fairly, new ones play first every game, and each reveal shows <span className="font-semibold text-white">whose song it was</span>.
             </p>
             <p className="mt-2 text-sm text-gray-400">
               {entries.length === 0 ? 'No music added yet.' : `${entries.length} player${entries.length === 1 ? '' : 's'} · ${total} songs in the mix`}
@@ -139,27 +149,44 @@ export function BlendPanel({ current, readOnly, onPick }: { current: Source; rea
         </div>
       </div>
 
-      <div className="rounded-2xl border border-gray-800 bg-gray-900/60 p-4">
-        <p className="mb-3 text-sm font-semibold text-white">Your music</p>
-        {mine ? (
-          <div className="flex items-center gap-3 rounded-xl bg-emerald-500/10 px-3 py-2.5 ring-1 ring-emerald-400/30">
-            {mine.via === 'spotify' ? <SpotifyIcon className="h-6 w-6" /> : <ListMusic className="h-6 w-6 text-emerald-300" />}
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-semibold text-white">{viaLabel(mine)}</span>
-              <span className="block text-xs text-emerald-200/80">{mine.count} songs in the Blend</span>
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-white">Your music</p>
+          {mine && (
+            <span className="text-xs text-gray-400 tabular-nums">
+              {mine.count}/{MAX_BLEND_PER_PLAYER} songs · {mySources.length}/{MAX_BLEND_SOURCES} sources
             </span>
-            {mine.via === 'spotify' && (
-              <button type="button" onClick={addSpotify} disabled={!!busy} className="rounded-lg p-2 text-gray-300 hover:bg-white/10 hover:text-white" aria-label="Refresh my songs" title="Shuffle in different songs">
-                {busy === 'spotify' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              </button>
-            )}
-            <button type="button" onClick={() => send({ t: 'unblend' })} className="rounded-lg p-2 text-gray-300 hover:bg-white/10 hover:text-white" aria-label="Remove my music">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        ) : (
+          )}
+        </div>
+        {mySources.length > 0 && (
+          <ul className="mb-3 space-y-2">
+            {mySources.map((src, i) => (
+              <li key={`${src.via}:${src.label}`} className="flex items-center gap-3 rounded-xl bg-emerald-500/10 px-3 py-2.5 ring-1 ring-emerald-400/30">
+                {src.via === 'spotify' ? <SpotifyIcon className="h-6 w-6" /> : <ListMusic className="h-6 w-6 text-emerald-300" />}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-white">{viaLabel(src)}</span>
+                  <span className="block text-xs text-emerald-200/80">{src.count} songs in the Blend</span>
+                </span>
+                {src.via === 'spotify' && (
+                  <button type="button" onClick={addSpotify} disabled={!!busy} className="rounded-lg p-2 text-gray-300 hover:bg-white/10 hover:text-white" aria-label="Refresh my songs" title="Shuffle in different songs">
+                    {busy === 'spotify' ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => send({ t: 'unblend', index: i })}
+                  className="rounded-lg p-2 text-gray-300 hover:bg-white/10 hover:text-white"
+                  aria-label={`Remove ${viaLabel(src)}`}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {canAdd && (
           <div className="grid gap-2 sm:grid-cols-2">
-            {config.enabled && (
+            {config.enabled && !hasSpotify && (
               <button
                 type="button"
                 onClick={addSpotify}
@@ -167,7 +194,7 @@ export function BlendPanel({ current, readOnly, onPick }: { current: Source; rea
                 className="flex h-12 items-center justify-center gap-2 rounded-xl bg-[#1db954] px-4 font-bold text-black transition hover:brightness-110 disabled:opacity-60"
               >
                 {busy === 'spotify' ? <Loader2 className="h-5 w-5 animate-spin" /> : <SpotifyIcon className="h-5 w-5 [&_circle]:fill-black [&_path]:fill-[#1db954]" />}
-                {me?.connected ? `Add my Spotify (${me.name})` : 'Connect Spotify'}
+                {busy === 'spotify' ? `Finding clips… ${found || ''}` : me?.connected ? `Add my Spotify (${me.name})` : 'Connect Spotify'}
               </button>
             )}
             <button
@@ -175,15 +202,15 @@ export function BlendPanel({ current, readOnly, onPick }: { current: Source; rea
               onClick={() => setShowLink((v) => !v)}
               className={clsx(
                 'flex h-12 items-center justify-center gap-2 rounded-xl border px-4 font-semibold transition',
-                showLink ? 'border-gray-500 bg-gray-800 text-white' : 'border-gray-700 bg-gray-900 text-gray-200 hover:border-gray-500',
-                !config.enabled && 'sm:col-span-2',
+                showLink ? 'border-white/30 bg-white/10 text-white' : 'border-white/10 bg-white/[0.03] text-gray-200 hover:border-white/30',
+                (!config.enabled || hasSpotify) && 'sm:col-span-2',
               )}
             >
-              <Link2 className="h-4 w-4" /> Add a playlist link
+              {mySources.length ? <Plus className="h-4 w-4" /> : <Link2 className="h-4 w-4" />} {mySources.length ? 'Add another playlist' : 'Add a playlist link'}
             </button>
           </div>
         )}
-        {showLink && !mine && (
+        {showLink && canAdd && (
           <form onSubmit={addPlaylist} className="mt-3 flex gap-2">
             <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://open.spotify.com/playlist/…" aria-label="Playlist link for the Blend" autoComplete="off" />
             <Button type="submit" variant="gradient" className="shrink-0 px-5" loading={busy === 'playlist'} disabled={!link.trim()}>
@@ -196,10 +223,19 @@ export function BlendPanel({ current, readOnly, onPick }: { current: Source; rea
             {error}
           </p>
         )}
-        {me?.connected && !mine && (
+        {me?.connected && me.tracks.length <= 80 && (
+          <p className="mt-3 text-xs text-gray-400">
+            Your Spotify was linked before Blends got bigger.{' '}
+            <button type="button" className="font-semibold text-brand-300 underline-offset-2 hover:underline" onClick={() => connectSpotify(location.pathname)}>
+              Reconnect
+            </button>{' '}
+            to bring in up to 300 of your songs.
+          </p>
+        )}
+        {me?.connected && !hasSpotify && (
           <button
             type="button"
-            className="mt-3 text-xs text-gray-500 underline-offset-2 hover:text-gray-300 hover:underline"
+            className="mt-3 block text-xs text-gray-500 underline-offset-2 hover:text-gray-300 hover:underline"
             onClick={async () => {
               await disconnectSpotify()
               await refresh()
@@ -215,11 +251,11 @@ export function BlendPanel({ current, readOnly, onPick }: { current: Source; rea
           {entries.map((e) => {
             const p = state.players.find((x) => x.id === e.playerId)!
             return (
-              <li key={e.playerId} className="flex items-center gap-3 rounded-xl border border-gray-800 bg-gray-900/60 px-3 py-2">
+              <li key={e.playerId} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
                 <PlayerAvatar avatar={p.avatar} photo={p.photo} name={p.name} size="sm" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-white">{p.name}</span>
-                  <span className="block truncate text-xs text-gray-400">{viaLabel(e)}</span>
+                  <span className="block truncate text-xs text-gray-400">{sourcesLabel(e)}</span>
                 </span>
                 <span className="rounded-full bg-gray-800 px-2 py-0.5 text-xs font-bold text-gray-300 tabular-nums">{e.count}</span>
               </li>

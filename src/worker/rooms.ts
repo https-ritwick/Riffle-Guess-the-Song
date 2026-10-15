@@ -7,6 +7,10 @@ export interface RoomInitOptions {
   settings?: Settings | null
   /** Single-player room. */
   solo?: boolean
+  /** Songs and questions already played (group games), so the room starts with new ones. */
+  played?: string[]
+  /** Today's daily challenge (one attempt, fixed questions). */
+  daily?: number
 }
 
 export function roomStub(env: Env, code: string) {

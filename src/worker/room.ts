@@ -1,13 +1,18 @@
 import { DurableObject } from 'cloudflare:workers'
+import { pickAwardNames, type AwardName } from '../shared/awards'
 import { findPreset } from '../shared/catalog'
+import { dailySettings, seededRandom } from '../shared/daily'
+import { buildChallengeQuestions, CHALLENGE_QUESTION, summarize, type ChallengeItem, type ChallengePrompt, type GameKind } from '../shared/challenges'
 import {
   ClientMessageSchema,
   DEFAULT_SETTINGS,
+  MAX_BLEND_PER_PLAYER,
+  MAX_BLEND_SOURCES,
   MAX_BLEND_TRACKS,
   normalizeSettings,
   SettingsSchema,
   TrackSchema,
-  type BlendEntry,
+  type BlendSource,
   type ClientMessage,
   type Phase,
   type Pick,
@@ -19,7 +24,7 @@ import {
   type Source,
   type Track,
 } from '../shared/protocol'
-import { buildQuestions, shuffle, type Question } from '../shared/questions'
+import { buildQuestions, dedupeTracks, playedKey, shuffle, type Question } from '../shared/questions'
 import {
   ANSWER_GRACE_MS,
   AVATARS,
@@ -32,7 +37,9 @@ import {
   scoreAnswer,
   WRONG_PENALTY,
 } from '../shared/rules'
-import { compareKey, primaryArtist, sanitizeName } from '../shared/text'
+import { sanitizeName } from '../shared/text'
+import { matchSong, songSearchUrl, type SongClip, type SongRef } from '../shared/songs'
+import { aiEnabled, generateAwardNames, generateChallenges } from './ai'
 import { json } from './http'
 import { spotifyArtwork } from './playlist'
 import type { RoomInitOptions } from './rooms'
@@ -42,8 +49,16 @@ const IDLE_TTL_MS = 6 * 60 * 60 * 1000
 /** Disconnected players are dropped when a new game starts after this long. */
 const STALE_PLAYER_MS = 60_000
 const MAX_MESSAGE_BYTES = 512 * 1024
-const REACTION_COOLDOWN_MS = 400
+const REACTION_COOLDOWN_MS = 350
 const PREVIEW_SECONDS = 30
+/** Songs / questions the room remembers, so the next games play something new first. */
+const MAX_PLAYED = 2000
+/** How long a challenge game waits for freshly written AI questions before using the bank. */
+const AI_WAIT_MS = 15_000
+/** AI questions kept ready per challenge kind. */
+const AI_TARGET = 20
+
+type ChallengeGame = Exclude<GameKind, 'songs'>
 
 interface PlayerRecord {
   id: string
@@ -79,6 +94,10 @@ interface RoomQuestion extends Question {
   owners?: string[]
   /** Decided when answering opens: show option art only if every option has some. */
   showArt?: boolean
+  /** Challenge rounds: what players solve instead of listening. */
+  challenge?: ChallengePrompt
+  /** Emoji songs: looked up so the reveal can play the song. */
+  song?: { title: string; movie: string; singer: string }
 }
 
 interface GameRecord {
@@ -90,6 +109,8 @@ interface GameRecord {
   answers: Record<string, AnswerRecord>
   history: RoundSummary[]
   recorded: boolean
+  /** This game's filmy award names (built-in first, AI-written ones when they arrive). */
+  awardNames?: Record<string, AwardName>
 }
 
 interface RoomRecord {
@@ -107,10 +128,23 @@ interface RoomRecord {
   hostTransferAt: number | null
   notice: string | null
   group: { id: string; name: string } | null
+  /** Group games: let signed-in people who aren't members join. */
   allowGuests: boolean
   solo: boolean
-  /** What each player added to the Blend; the songs themselves live under the 'blend' storage key. */
-  blendMeta: Record<string, Omit<BlendEntry, 'playerId'>>
+  /** What each player added to the Blend; the songs themselves live under 'blend:<player id>'. */
+  blendMeta: Record<string, BlendSource[]>
+  /** Recently played songs and questions (playedKey), oldest first. */
+  played: string[]
+  /** Award names this room has seen recently, so each game gets new ones. */
+  recentAwards: string[]
+  /** Daily challenge rooms: which day's challenge (one attempt, recorded on the daily leaderboard). */
+  daily: number | null
+}
+
+/** AI-written challenge questions waiting to be played, and summaries of ones already used. */
+interface AiStore {
+  ready: Partial<Record<ChallengeGame, ChallengeItem[]>>
+  seen: Partial<Record<ChallengeGame, string[]>>
 }
 
 interface SessionIdentity {
@@ -128,11 +162,6 @@ interface Attachment {
 
 const IN_GAME: Phase[] = ['countdown', 'question', 'reveal']
 
-/** Same song regardless of which service or player it came from. */
-function trackKey(t: Track): string {
-  return `${compareKey(t.title)}|${compareKey(primaryArtist(t.artist))}`
-}
-
 function secureRandom(): number {
   return crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32
 }
@@ -141,7 +170,13 @@ function newId(): string {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 12)
 }
 
-function sourceTitle(source: Source): string {
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+function sourceTitle(settings: Settings): string {
+  if (settings.game === 'dialogue') return 'Dialogue Baazi'
+  if (settings.game === 'actor') return 'Star Spotting'
+  if (settings.game === 'emoji') return 'Emoji Gaana'
+  const source: Source = settings.source
   switch (source.kind) {
     case 'preset':
       return findPreset(source.id)?.name ?? 'Mix'
@@ -157,15 +192,35 @@ function sourceTitle(source: Source): string {
 }
 
 /**
+ * The song behind an emoji puzzle, from the iTunes store, so the reveal can play it.
+ * `limited` means Apple refused to answer (it rate-limits server IPs); browsers then look it up themselves.
+ */
+async function findSong(song: SongRef, minScore = 1): Promise<{ clip: SongClip | null; limited: boolean }> {
+  try {
+    const res = await fetch(songSearchUrl(song), { signal: AbortSignal.timeout(6000) })
+    if (!res.ok) return { clip: null, limited: res.status === 429 || res.status === 403 }
+    const { results = [] } = (await res.json()) as { results?: Parameters<typeof matchSong>[0] }
+    const match = matchSong(results, song)
+    return { clip: match && match.score >= minScore ? match.clip : null, limited: false }
+  } catch {
+    return { clip: null, limited: true }
+  }
+}
+
+/**
  * One Durable Object per room. It is the single source of truth for the game:
  * it owns the player list, the questions, the timers (via alarms) and the scores,
  * and pushes a personalised snapshot to every connected browser after each change.
  */
 export class GameRoom extends DurableObject<Env> {
   private room: RoomRecord | null = null
-  /** Blend songs per player id (kept apart from the room record, which is rewritten on every answer). */
-  private blend: Record<string, Track[]> = {}
-  private blendDirty = false
+  /** Blend songs per player id, one list per source (kept apart from the room record, which is rewritten on every answer). */
+  private blend: Record<string, Track[][]> = {}
+  private blendDirty = new Set<string>()
+  private ai: AiStore = { ready: {}, seen: {} }
+  private aiDirty = false
+  private aiInflight = new Map<ChallengeGame, Promise<void>>()
+  private starting = false
   private artCache = new Map<string, string | null>()
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -180,6 +235,12 @@ export class GameRoom extends DurableObject<Env> {
         stored.hostUserId ??= null
         stored.solo ??= false
         stored.blendMeta ??= {}
+        stored.played ??= []
+        stored.recentAwards ??= []
+        stored.daily ??= null
+        for (const [pid, meta] of Object.entries(stored.blendMeta)) {
+          if (!Array.isArray(meta)) stored.blendMeta[pid] = [meta as BlendSource]
+        }
         for (const p of stored.players) {
           p.userId ??= null
           p.photo ??= null
@@ -187,7 +248,17 @@ export class GameRoom extends DurableObject<Env> {
         }
       }
       this.room = stored ?? null
-      this.blend = (await ctx.storage.get<Record<string, Track[]>>('blend')) ?? {}
+      for (const [key, lists] of await ctx.storage.list<Track[][]>({ prefix: 'blend:' })) this.blend[key.slice(6)] = lists
+      // Older rooms kept every player's songs under one key.
+      const legacy = await ctx.storage.get<Record<string, Track[]>>('blend')
+      if (legacy) {
+        for (const [pid, tracks] of Object.entries(legacy)) {
+          this.blend[pid] = [tracks]
+          this.blendDirty.add(pid)
+        }
+        await ctx.storage.delete('blend')
+      }
+      this.ai = (await ctx.storage.get<AiStore>('ai')) ?? { ready: {}, seen: {} }
     })
     // Keep-alive pings are answered without waking the object from hibernation.
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'))
@@ -207,7 +278,7 @@ export class GameRoom extends DurableObject<Env> {
       phase: 'lobby',
       hostId: null,
       hostUserId: opts.hostUserId ?? null,
-      settings: opts.settings ? normalizeSettings(opts.settings) : DEFAULT_SETTINGS,
+      settings: opts.daily ? dailySettings(opts.daily) : opts.settings ? normalizeSettings(opts.settings) : DEFAULT_SETTINGS,
       players: [],
       game: null,
       phaseEndsAt: null,
@@ -215,19 +286,25 @@ export class GameRoom extends DurableObject<Env> {
       notice: null,
       group: opts.group ?? null,
       allowGuests: opts.group ? !!opts.allowGuests : true,
-      solo: !!opts.solo,
+      solo: !!opts.solo || !!opts.daily,
       blendMeta: {},
+      played: opts.played?.slice(-MAX_PLAYED) ?? [],
+      recentAwards: [],
+      daily: opts.daily ?? null,
     }
+    for (const pid of Object.keys(this.blend)) this.blendDirty.add(pid)
     this.blend = {}
-    this.blendDirty = true
+    this.ai = { ready: {}, seen: {} }
+    this.aiDirty = true
     await this.persist()
     await this.schedule()
+    this.prefetch()
     return true
   }
 
   async info(): Promise<RoomInfo> {
     const room = this.room
-    if (!room) return { code: '', exists: false, phase: null, players: 0, group: null, membersOnly: false, solo: false }
+    if (!room) return { code: '', exists: false, phase: null, players: 0, group: null, membersOnly: false, signInRequired: false, solo: false }
     return {
       code: room.code,
       exists: true,
@@ -235,8 +312,14 @@ export class GameRoom extends DurableObject<Env> {
       players: room.players.filter((p) => p.connected).length,
       group: room.group,
       membersOnly: !!room.group && !room.allowGuests,
+      signInRequired: !!room.group,
       solo: room.solo,
     }
+  }
+
+  /** Songs and questions this room has played (group games carry them over to the next room). */
+  async playedKeys(): Promise<string[]> {
+    return this.room?.played ?? []
   }
 
   override async fetch(request: Request): Promise<Response> {
@@ -289,7 +372,7 @@ export class GameRoom extends DurableObject<Env> {
     }
 
     room.lastActive = Date.now()
-    const changed = this.handle(ws, parsed)
+    const changed = await this.handle(ws, parsed)
     if (changed) await this.commit()
   }
 
@@ -326,9 +409,9 @@ export class GameRoom extends DurableObject<Env> {
   }
 
   // ---------------------------------------------------------------------------
-  // Message handling. Returns true when room state changed.
+  // Message handling. Resolves to true when room state changed.
 
-  private handle(ws: WebSocket, msg: ClientMessage): boolean {
+  private async handle(ws: WebSocket, msg: ClientMessage): Promise<boolean> {
     const room = this.room!
     const now = Date.now()
     const att = this.attachment(ws)
@@ -364,26 +447,19 @@ export class GameRoom extends DurableObject<Env> {
         return false
       }
 
-      case 'blend': {
-        if (room.phase !== 'lobby' && room.phase !== 'results') return false
-        const tracks: Track[] = []
-        for (const item of msg.tracks.slice(0, MAX_BLEND_TRACKS)) {
-          const parsed = TrackSchema.safeParse(item)
-          if (parsed.success) tracks.push(parsed.data)
-        }
-        if (tracks.length === 0) {
-          this.send(ws, { t: 'error', code: 'bad_blend', message: 'None of those songs can be played.' })
-          return false
-        }
-        this.blend[player.id] = tracks
-        this.blendDirty = true
-        room.blendMeta[player.id] = { via: msg.via, label: msg.label, image: msg.image ?? null, count: tracks.length }
-        return true
-      }
+      case 'blend':
+        return this.addBlend(ws, player, msg)
 
       case 'unblend': {
-        if (!room.blendMeta[player.id]) return false
-        this.dropBlend(player.id)
+        const sources = room.blendMeta[player.id]
+        if (!sources) return false
+        if (msg.index === undefined || sources.length <= 1) {
+          this.dropBlend(player.id)
+        } else if (msg.index < sources.length) {
+          sources.splice(msg.index, 1)
+          this.blend[player.id]?.splice(msg.index, 1)
+          this.blendDirty.add(player.id)
+        }
         return true
       }
     }
@@ -397,6 +473,7 @@ export class GameRoom extends DurableObject<Env> {
     switch (msg.t) {
       case 'settings': {
         if (room.phase !== 'lobby' && room.phase !== 'results') return false
+        if (room.daily) return false
         const next = SettingsSchema.safeParse({ ...room.settings, ...msg.settings })
         if (!next.success) return false
         if (next.data.source.kind === 'preset' && !findPreset(next.data.source.id)) {
@@ -405,6 +482,8 @@ export class GameRoom extends DurableObject<Env> {
         }
         room.settings = next.data
         room.notice = null
+        // Picking a challenge starts AI writing its questions while everyone gets ready.
+        this.prefetch()
         return true
       }
 
@@ -426,8 +505,8 @@ export class GameRoom extends DurableObject<Env> {
 
       case 'start':
         // The host's screen may be ahead of the last settings echo; use what they saw.
-        if (msg.settings && !(msg.settings.source.kind === 'preset' && !findPreset(msg.settings.source.id))) room.settings = msg.settings
-        return this.start(msg.pool, now)
+        if (msg.settings && !room.daily && !(msg.settings.source.kind === 'preset' && !findPreset(msg.settings.source.id))) room.settings = msg.settings
+        return this.start(msg.pool, msg.avoid ?? [])
 
       case 'kick': {
         if (msg.playerId === player.id) return false
@@ -490,12 +569,13 @@ export class GameRoom extends DurableObject<Env> {
       this.send(ws, { t: 'error', code: 'bad_name', message: 'Please enter a name.' })
       return false
     }
+    // Group games are for signed-in people only (and only members, if the group says so).
+    if (room.group && !att.user) {
+      this.send(ws, { t: 'error', code: 'signin_required', message: `Sign in with Google to join “${room.group.name}”’s game.` })
+      return false
+    }
     if (room.group && !room.allowGuests && !att.member) {
-      this.send(ws, {
-        t: 'error',
-        code: 'members_only',
-        message: att.user ? `This game is only for members of “${room.group.name}”.` : `Sign in to join “${room.group.name}”’s game.`,
-      })
+      this.send(ws, { t: 'error', code: 'members_only', message: `This game is only for members of “${room.group.name}”.` })
       return false
     }
 
@@ -571,32 +651,80 @@ export class GameRoom extends DurableObject<Env> {
     return true
   }
 
-  private start(rawPool: unknown[], now: number): boolean {
+  /** Add (or refresh) one of a player's Blend sources. */
+  private addBlend(ws: WebSocket, player: PlayerRecord, msg: Extract<ClientMessage, { t: 'blend' }>): boolean {
+    const room = this.room!
+    if (room.phase !== 'lobby' && room.phase !== 'results') return false
+    const tracks: Track[] = []
+    for (const item of msg.tracks.slice(0, MAX_BLEND_TRACKS)) {
+      const parsed = TrackSchema.safeParse(item)
+      if (parsed.success) tracks.push(parsed.data)
+    }
+    if (tracks.length === 0) {
+      this.send(ws, { t: 'error', code: 'bad_blend', message: 'None of those songs can be played.' })
+      return false
+    }
+    const sources = [...(room.blendMeta[player.id] ?? [])]
+    const lists = [...(this.blend[player.id] ?? [])]
+    // Re-adding Spotify (or the same playlist) refreshes that source instead of duplicating it.
+    const same = sources.findIndex((s) => (msg.via === 'spotify' ? s.via === 'spotify' : s.via === 'playlist' && s.label === msg.label))
+    if (same >= 0) {
+      sources.splice(same, 1)
+      lists.splice(same, 1)
+    }
+    while (sources.length >= MAX_BLEND_SOURCES) {
+      sources.shift()
+      lists.shift()
+    }
+    const space = MAX_BLEND_PER_PLAYER - lists.reduce((n, l) => n + l.length, 0)
+    const kept = tracks.slice(0, Math.max(0, space))
+    if (kept.length === 0) {
+      this.send(ws, { t: 'error', code: 'blend_full', message: `You already have ${MAX_BLEND_PER_PLAYER} songs in the Blend. Remove a source first.` })
+      return false
+    }
+    sources.push({ via: msg.via, label: msg.label, image: msg.image ?? null, count: kept.length })
+    lists.push(kept)
+    room.blendMeta[player.id] = sources
+    this.blend[player.id] = lists
+    this.blendDirty.add(player.id)
+    return true
+  }
+
+  private async start(rawPool: unknown[], avoid: string[]): Promise<boolean> {
     const room = this.room!
     if (room.phase !== 'loading' && room.phase !== 'lobby' && room.phase !== 'results') return false
+    if (this.starting) return false
+    if (room.daily) {
+      if (room.game) {
+        this.backToMenu('You’ve played today’s challenge — a new one drops at midnight.')
+        return true
+      }
+      room.settings = dailySettings(room.daily)
+    }
+    if (room.settings.game !== 'songs') return this.startChallenge(room.settings.game, avoid)
 
+    const played = this.playedSet(avoid)
     let pool: Track[] = []
     let owners = new Map<string, string[]>()
     const isBlend = room.settings.source.kind === 'blend'
     if (isBlend) {
-      ;({ pool, owners } = this.blendPool())
+      ;({ pool, owners } = this.blendPool(played))
     } else {
+      const all: Track[] = []
       for (const item of rawPool) {
         const parsed = TrackSchema.safeParse(item)
-        if (parsed.success) pool.push(parsed.data)
+        if (parsed.success) all.push(parsed.data)
       }
+      // Songs this room (or this host) hasn't heard lately come first, in a fresh order every game.
+      pool = [...shuffle(all.filter((t) => !played.has(playedKey(t))), secureRandom), ...shuffle(all.filter((t) => played.has(playedKey(t))), secureRandom)]
     }
     if (isBlend && pool.length < 4) {
-      room.phase = room.game ? 'results' : 'lobby'
-      room.phaseEndsAt = null
-      room.notice = 'The Blend needs more songs — ask players to add their Spotify or a playlist.'
+      this.backToMenu('The Blend needs more songs — ask players to add their Spotify or a playlist.')
       return true
     }
-    const built = buildQuestions(pool, { ...room.settings, order: isBlend ? 'given' : 'shuffle' }, secureRandom)
+    const built = buildQuestions(pool, { ...room.settings, order: 'given' }, secureRandom)
     if (!built.ok) {
-      room.phase = room.game ? 'results' : 'lobby'
-      room.phaseEndsAt = null
-      room.notice = built.message
+      this.backToMenu(built.message)
       return true
     }
 
@@ -605,19 +733,99 @@ export class GameRoom extends DurableObject<Env> {
     const questions: RoomQuestion[] = built.questions.map((q) => ({
       ...q,
       clipOffset: room.settings.clipStart === 'random' ? Math.floor(secureRandom() * (maxOffset + 1)) : 0,
-      owners: isBlend ? (owners.get(trackKey(q.track)) ?? []) : [],
+      owners: isBlend ? (owners.get(playedKey(q.track)) ?? []) : [],
     }))
+    this.beginGame(questions, built.notice)
+    return true
+  }
 
+  /** Dialogue, star and emoji games: curated questions plus any fresh AI-written ones. */
+  private async startChallenge(game: ChallengeGame, avoid: string[]): Promise<boolean> {
+    const room = this.room!
+    if (room.daily) {
+      // Everyone gets the same curated questions today, in the same order.
+      const built = buildChallengeQuestions({ game, ai: [], played: new Set(), rounds: room.settings.rounds, difficulty: room.settings.difficulty }, seededRandom(room.daily * 2654435761))
+      this.beginGame(built.questions.map((q) => this.toRoomQuestion(q)), null)
+      return true
+    }
+    this.starting = true
+    try {
+      this.prefetch()
+      const pending = this.aiInflight.get(game)
+      if (pending && this.unplayedAi(game).length < room.settings.rounds) await Promise.race([pending, sleep(AI_WAIT_MS)])
+    } finally {
+      this.starting = false
+    }
+    // The host may have ended things (or the room been wiped) while we waited.
+    if (this.room !== room || (room.phase !== 'loading' && room.phase !== 'lobby' && room.phase !== 'results')) return false
+
+    const ready = this.ai.ready[game] ?? []
+    const built = buildChallengeQuestions(
+      { game, ai: ready, played: this.playedSet(avoid), rounds: room.settings.rounds, difficulty: room.settings.difficulty },
+      secureRandom,
+    )
+    if (built.questions.length === 0) {
+      this.backToMenu('Could not build any questions right now. Please try again.')
+      return true
+    }
+    // AI questions are used once; remember them so the next batch is all new.
+    const used = new Set(built.questions.filter((q) => q.item.ai).map((q) => q.item.id))
+    if (used.size) {
+      this.ai.ready[game] = ready.filter((i) => !used.has(i.id))
+      this.ai.seen[game] = [...(this.ai.seen[game] ?? []), ...built.questions.filter((q) => used.has(q.item.id)).map((q) => summarize(q.item))].slice(-150)
+      this.aiDirty = true
+    }
+    this.beginGame(
+      built.questions.map((q) => this.toRoomQuestion(q)),
+      built.notice,
+    )
+    // Write the next batch while this game plays.
+    this.prefetch()
+    return true
+  }
+
+  private toRoomQuestion(q: ReturnType<typeof buildChallengeQuestions>['questions'][number]): RoomQuestion {
+    return {
+      track: q.track,
+      mode: q.mode,
+      options: q.options,
+      optionArt: q.optionArt,
+      optionSpotify: q.optionSpotify,
+      correct: q.correct,
+      clipOffset: 0,
+      owners: [],
+      challenge: q.challenge,
+      ...(q.item.song ? { song: { title: q.item.song.title, movie: q.item.song.movie, singer: q.item.song.singer } } : {}),
+    }
+  }
+
+  private beginGame(questions: RoomQuestion[], notice: string | null): void {
+    const room = this.room!
+    const now = Date.now()
     this.pruneStalePlayers(now)
     this.resetScores()
-    const game: GameRecord = { id: crypto.randomUUID(), questions, index: 0, startsAt: 0, endsAt: 0, answers: {}, history: [], recorded: false }
+    const awardNames = pickAwardNames(secureRandom, room.recentAwards)
+    const game: GameRecord = { id: crypto.randomUUID(), questions, index: 0, startsAt: 0, endsAt: 0, answers: {}, history: [], recorded: false, awardNames }
     room.game = game
     room.phase = 'countdown'
     room.phaseEndsAt = now + COUNTDOWN_MS
-    room.notice = built.notice
+    room.notice = notice
+    room.played = [...room.played, ...questions.map((q) => playedKey(q.track, q.mode))].slice(-MAX_PLAYED)
+    room.recentAwards = [...room.recentAwards, ...Object.values(awardNames).map((n) => n.title)].slice(-80)
     this.ctx.waitUntil(Promise.all([this.enrichRound(game, 0), this.enrichRound(game, 1)]))
     if (room.group) this.ctx.waitUntil(this.saveGroupSettings())
-    return true
+    if (aiEnabled(this.env)) this.ctx.waitUntil(this.nameAwards(game))
+  }
+
+  private backToMenu(notice: string): void {
+    const room = this.room!
+    room.phase = room.game ? 'results' : 'lobby'
+    room.phaseEndsAt = null
+    room.notice = notice
+  }
+
+  private playedSet(avoid: string[]): Set<string> {
+    return new Set([...this.room!.played, ...avoid])
   }
 
   private answer(player: PlayerRecord, round: number, choice: number, now: number): boolean {
@@ -697,7 +905,7 @@ export class GameRoom extends DurableObject<Env> {
       case 'loading':
         room.phase = game ? 'results' : 'lobby'
         room.phaseEndsAt = null
-        room.notice = 'Loading songs took too long. Please try again.'
+        room.notice = 'Loading took too long. Please try again.'
         return
       case 'countdown':
         if (game) this.startQuestion(game, now)
@@ -761,6 +969,7 @@ export class GameRoom extends DurableObject<Env> {
       track: question.track,
       picks,
       owners: question.owners ?? [],
+      challenge: question.challenge ?? null,
     })
     room.phase = 'reveal'
     room.phaseEndsAt = now + REVEAL_MS
@@ -773,6 +982,10 @@ export class GameRoom extends DurableObject<Env> {
     if (room.group && room.game && !room.game.recorded && room.game.history.length > 0) {
       room.game.recorded = true
       this.ctx.waitUntil(this.recordGame(room.game))
+    }
+    if (room.daily && room.game && !room.game.recorded && room.game.history.length === room.game.questions.length) {
+      room.game.recorded = true
+      this.ctx.waitUntil(this.recordDaily(room.daily))
     }
   }
 
@@ -814,58 +1027,167 @@ export class GameRoom extends DurableObject<Env> {
     delete this.room!.blendMeta[playerId]
     if (this.blend[playerId]) {
       delete this.blend[playerId]
-      this.blendDirty = true
+      this.blendDirty.add(playerId)
     }
   }
 
   /**
    * Everyone's songs, interleaved so each player gets a fair share of rounds.
-   * Songs that several players brought (a Blend match) come first.
+   * Songs nobody has played in this room come first (in a new order every game),
+   * and a few songs several players brought (Blend matches) lead the way.
    */
-  private blendPool(): { pool: Track[]; owners: Map<string, string[]> } {
+  private blendPool(played: Set<string>): { pool: Track[]; owners: Map<string, string[]> } {
     const room = this.room!
     const lists = room.players
-      .filter((p) => this.blend[p.id]?.length)
-      .map((p) => ({ name: p.name, tracks: shuffle(this.blend[p.id]!, secureRandom) }))
+      .filter((p) => this.blend[p.id]?.some((l) => l.length))
+      .map((p) => {
+        const mine = dedupeTracks(this.blend[p.id]!.flat())
+        return {
+          name: p.name,
+          fresh: shuffle(mine.filter((t) => !played.has(playedKey(t))), secureRandom),
+          heard: shuffle(mine.filter((t) => played.has(playedKey(t))), secureRandom),
+        }
+      })
     const owners = new Map<string, string[]>()
     for (const l of lists) {
-      for (const t of l.tracks) {
-        const names = owners.get(trackKey(t)) ?? []
+      for (const t of [...l.fresh, ...l.heard]) {
+        const names = owners.get(playedKey(t)) ?? []
         if (!names.includes(l.name)) names.push(l.name)
-        owners.set(trackKey(t), names)
+        owners.set(playedKey(t), names)
       }
     }
-    const interleaved: Track[] = []
-    for (let i = 0; lists.some((l) => i < l.tracks.length); i++) {
-      for (const l of shuffle(lists, secureRandom)) if (l.tracks[i]) interleaved.push(l.tracks[i]!)
+    const interleave = (pick: (l: (typeof lists)[number]) => Track[]) => {
+      const out: Track[] = []
+      for (let i = 0; lists.some((l) => i < pick(l).length); i++) {
+        for (const l of shuffle(lists, secureRandom)) if (pick(l)[i]) out.push(pick(l)[i]!)
+      }
+      return out
     }
-    const shared = interleaved.filter((t) => (owners.get(trackKey(t))?.length ?? 0) > 1)
-    return { pool: [...shuffle(shared, secureRandom), ...interleaved], owners }
+    const fresh = interleave((l) => l.fresh)
+    const heard = interleave((l) => l.heard)
+    const matches = fresh.filter((t) => (owners.get(playedKey(t))?.length ?? 0) > 1)
+    const leaders = shuffle(matches, secureRandom).slice(0, Math.ceil(room.settings.rounds * 0.3))
+    return { pool: [...leaders, ...fresh, ...heard], owners }
   }
 
   // ---------------------------------------------------------------------------
-  // Background work: album art, group history
+  // AI: fresh challenge questions and award names
+
+  private unplayedAi(game: ChallengeGame): ChallengeItem[] {
+    const played = new Set(this.room?.played ?? [])
+    return (this.ai.ready[game] ?? []).filter((i) => !played.has(i.id))
+  }
+
+  /** Have the AI write questions for the room's current challenge, unless enough are ready. */
+  private prefetch(): void {
+    const game = this.room?.settings.game
+    if (!game || game === 'songs' || this.room?.daily || !aiEnabled(this.env) || this.aiInflight.has(game)) return
+    if (this.unplayedAi(game).length >= AI_TARGET) return
+    const task = (async () => {
+      let items = await generateChallenges(this.env, game, AI_TARGET, this.ai.seen[game] ?? [])
+      // An emoji puzzle is only as good as its song: keep the ones iTunes knows, with their clip.
+      if (game === 'emoji') items = await this.verifySongs(items)
+      if (!items.length || !this.room) return
+      const have = this.ai.ready[game] ?? []
+      const ids = new Set(have.map((i) => i.id))
+      this.ai.ready[game] = [...have, ...items.filter((i) => !ids.has(i.id))].slice(-60)
+      this.aiDirty = true
+      await this.persist()
+      this.broadcastState()
+    })()
+      .catch((err) => console.error('ai prefetch failed', err))
+      .finally(() => this.aiInflight.delete(game))
+    this.aiInflight.set(game, task)
+    this.ctx.waitUntil(task)
+  }
 
   /**
-   * Spotify playlist tracks arrive without album art. Fetch it for one round's song
-   * and its wrong answers shortly before the round (a few requests per round).
+   * Keep emoji puzzles whose song iTunes knows (with its clip). When Apple won't answer
+   * this server, the puzzles are kept unchecked rather than thrown away.
+   */
+  private async verifySongs(items: ChallengeItem[]): Promise<ChallengeItem[]> {
+    const out: ChallengeItem[] = []
+    let checked = 0
+    for (let i = 0; i < items.length; i += 4) {
+      const batch = items.slice(i, i + 4)
+      const found = await Promise.all(batch.map((it) => (it.song ? findSong(it.song, 3) : Promise.resolve({ clip: null, limited: true }))))
+      batch.forEach((it, n) => {
+        const f = found[n]!
+        if (f.limited) {
+          out.push(it)
+          return
+        }
+        checked++
+        if (f.clip && it.song) out.push({ ...it, song: { ...it.song, preview: f.clip.preview, artwork: f.clip.artwork, link: f.clip.link } })
+      })
+    }
+    console.log(`ai: ${out.length}/${items.length} emoji puzzles kept (${checked} checked against iTunes)`)
+    console.log('ai: sample', out.slice(0, 6).map((i) => `${i.prompt} → ${i.answer} [${i.note}]`).join(' | '))
+    return out
+  }
+
+  /** Swap in AI-written award names themed on this game (they're ready long before the results). */
+  private async nameAwards(game: GameRecord): Promise<void> {
+    const room = this.room
+    if (!room) return
+    const names = await generateAwardNames(this.env, {
+      what: room.settings.game === 'songs' ? `guess the song from “${sourceTitle(room.settings)}”` : `${sourceTitle(room.settings)} — ${CHALLENGE_QUESTION[game.questions[0]?.challenge?.kind ?? 'dialogue']}`,
+      highlights: game.questions.map((q) => (q.challenge ? q.track.title : `${q.track.title} (${q.track.artist})`)),
+      players: room.players.filter((p) => p.connected).length,
+      avoid: room.recentAwards,
+    })
+    if (!names || this.room?.game?.id !== game.id) return
+    game.awardNames = { ...game.awardNames, ...names }
+    room.recentAwards = [...room.recentAwards, ...Object.values(names).map((n) => n.title)].slice(-80)
+    await this.commit()
+  }
+
+  // ---------------------------------------------------------------------------
+  // Background work: album art, emoji songs, group history
+
+  /**
+   * Spotify playlist tracks arrive without album art, and emoji puzzles need their
+   * song's clip for the reveal. Fetch them for one round shortly before it plays.
    */
   private async enrichRound(game: GameRecord, index: number): Promise<void> {
     const q = game.questions[index]
     if (!q) return
-    q.optionArt ??= []
-    q.optionSpotify ??= []
-    const jobs = q.options.map(async (_, i) => {
-      const id = q.optionSpotify[i]
-      if (q.optionArt[i] || !id) return
-      if (!this.artCache.has(id)) this.artCache.set(id, await spotifyArtwork(id))
-      const art = this.artCache.get(id)
-      if (art) q.optionArt[i] = art
-    })
-    await Promise.all(jobs)
-    if (!q.track.artwork && q.optionArt[q.correct]) q.track.artwork = q.optionArt[q.correct]!
+    if (q.song && !q.track.preview) {
+      const { clip } = await findSong(q.song)
+      // The album line stays the puzzle's decode.
+      if (clip) q.track = { ...q.track, preview: clip.preview, artwork: clip.artwork, link: clip.link }
+    } else if (!q.challenge) {
+      q.optionArt ??= []
+      q.optionSpotify ??= []
+      const jobs = q.options.map(async (_, i) => {
+        const id = q.optionSpotify[i]
+        if (q.optionArt[i] || !id) return
+        if (!this.artCache.has(id)) this.artCache.set(id, await spotifyArtwork(id))
+        const art = this.artCache.get(id)
+        if (art) q.optionArt[i] = art
+      })
+      await Promise.all(jobs)
+      if (!q.track.artwork && q.optionArt[q.correct]) q.track.artwork = q.optionArt[q.correct]!
+    }
     // Only persist if this game is still the current one.
     if (this.room?.game?.id === game.id) await this.persist()
+  }
+
+  /** A finished daily challenge goes on today's leaderboard. */
+  private async recordDaily(day: number): Promise<void> {
+    const room = this.room
+    const p = room?.players[0]
+    if (!room || !p) return
+    try {
+      await this.env.DB.prepare(
+        `INSERT OR IGNORE INTO daily_scores (day, room_code, user_id, name, score, correct, total, played_at)
+         VALUES (?, ?, (SELECT id FROM users WHERE id = ?), ?, ?, ?, ?, ?)`,
+      )
+        .bind(day, room.code, p.userId, p.name, p.score, p.correct, room.game?.questions.length ?? 0, Date.now())
+        .run()
+    } catch (err) {
+      console.error('recording daily score failed (is migration 0004 applied?)', err)
+    }
   }
 
   private async saveGroupSettings(): Promise<void> {
@@ -891,7 +1213,7 @@ export class GameRoom extends DurableObject<Env> {
           game.id,
           room.group.id,
           room.code,
-          sourceTitle(room.settings.source).slice(0, 160),
+          sourceTitle(room.settings).slice(0, 160),
           game.history.length,
           now,
         ),
@@ -905,6 +1227,13 @@ export class GameRoom extends DurableObject<Env> {
       await this.env.DB.batch(statements)
     } catch (err) {
       console.error('recording game failed', err)
+    }
+    // The group remembers what it played, so its next room starts with new songs too.
+    // (Kept apart from the history batch: it needs migration 0003.)
+    try {
+      await this.env.DB.prepare('UPDATE groups SET played_json = ? WHERE id = ?').bind(JSON.stringify(room.played.slice(-600)), room.group.id).run()
+    } catch (err) {
+      console.error('saving played songs failed (is migration 0003 applied?)', err)
     }
   }
 
@@ -920,6 +1249,7 @@ export class GameRoom extends DurableObject<Env> {
     const live = room.settings.liveScoring
     const answering = room.phase === 'question' || room.phase === 'reveal'
     const mine = pid && game && answering ? game.answers[pid] : undefined
+    const next = game?.questions[game.index + 1]
 
     return {
       code: room.code,
@@ -957,23 +1287,48 @@ export class GameRoom extends DurableObject<Env> {
               double: this.isDoubleRound(),
               startsAt: room.phase === 'countdown' ? (room.phaseEndsAt ?? 0) : game.startsAt,
               endsAt: room.phase === 'countdown' ? (room.phaseEndsAt ?? 0) + room.settings.guessSeconds * 1000 : game.endsAt,
-              preview: question.track.preview,
+              // Challenge rounds are silent while answering; an emoji song plays at its reveal.
+              preview: question.challenge ? '' : question.track.preview,
               clipOffset: question.clipOffset ?? 0,
               difficulty: room.settings.difficulty,
               options: room.phase === 'countdown' ? null : question.options,
               optionArt: room.phase !== 'countdown' && question.showArt ? question.optionArt : null,
               yourChoice: mine ? mine.choice : null,
-              yourResult: mine && live ? { correct: mine.correct, points: mine.points, first: !!mine.first, correctIndex: question.correct } : null,
-              reveal: last ? { correct: last.correct, track: question.track, picks: last.picks, owners: question.owners ?? [] } : null,
-              nextPreview: room.phase === 'reveal' ? (game.questions[game.index + 1]?.track.preview ?? null) : null,
+              yourResult:
+                mine && live
+                  ? {
+                      correct: mine.correct,
+                      points: mine.points,
+                      first: !!mine.first,
+                      correctIndex: question.correct,
+                      song: mine.correct && question.challenge?.kind === 'emoji' && question.track.preview ? question.track.preview : null,
+                      ...(mine.correct && question.song && !question.track.preview ? { find: { title: question.song.title, movie: question.song.movie } } : {}),
+                    }
+                  : null,
+              reveal: last
+                ? {
+                    correct: last.correct,
+                    track: question.track,
+                    picks: last.picks,
+                    owners: question.owners ?? [],
+                    ...(question.song && !question.track.preview ? { find: { title: question.song.title, movie: question.song.movie } } : {}),
+                  }
+                : null,
+              challenge: room.phase === 'countdown' ? null : (question.challenge ?? null),
+              nextPreview: room.phase === 'reveal' && next && !next.challenge ? next.track.preview : null,
             }
           : null,
       history:
         (room.phase === 'results' || room.phase === 'loading') && game
-          ? game.history.map((h) => ({ ...h, optionArt: h.optionArt ?? null, owners: h.owners ?? [], track: game.questions[h.index]?.track ?? h.track }))
+          ? game.history.map((h) => ({ ...h, optionArt: h.optionArt ?? null, owners: h.owners ?? [], challenge: h.challenge ?? null, track: game.questions[h.index]?.track ?? h.track }))
           : null,
       solo: room.solo,
-      blend: Object.entries(room.blendMeta).map(([playerId, m]) => ({ playerId, ...m })),
+      blend: Object.entries(room.blendMeta)
+        .filter(([, sources]) => sources.length > 0)
+        .map(([playerId, sources]) => ({ playerId, ...sources[0]!, count: sources.reduce((n, s) => n + s.count, 0), sources })),
+      ai: aiEnabled(this.env),
+      daily: room.daily,
+      awardNames: room.phase === 'results' || room.phase === 'loading' ? (game?.awardNames ?? null) : null,
     }
   }
 
@@ -985,9 +1340,14 @@ export class GameRoom extends DurableObject<Env> {
 
   private async persist(): Promise<void> {
     if (this.room) await this.ctx.storage.put('room', this.room)
-    if (this.blendDirty) {
-      this.blendDirty = false
-      await this.ctx.storage.put('blend', this.blend)
+    for (const pid of this.blendDirty) {
+      if (this.blend[pid]) await this.ctx.storage.put(`blend:${pid}`, this.blend[pid])
+      else await this.ctx.storage.delete(`blend:${pid}`)
+    }
+    this.blendDirty.clear()
+    if (this.aiDirty) {
+      this.aiDirty = false
+      await this.ctx.storage.put('ai', this.ai)
     }
   }
 

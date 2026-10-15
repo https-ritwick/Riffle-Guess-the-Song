@@ -11,7 +11,7 @@ import { Button, Card, Input, SectionTitle, Spinner, Toggle, UserPhoto } from '.
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { useGroup } from '../lib/groups'
-import { describeSource } from '../lib/source'
+import { describeGame } from '../lib/source'
 import { SignInRequired } from './GroupsPage'
 import { BRAND } from '../../shared/brand'
 
@@ -306,8 +306,8 @@ function AdminSettings({ group, reload }: { group: GroupDetail; reload: () => Pr
         </Button>
       </form>
       <Toggle
-        label="Let guests join group games"
-        hint="When off, only signed-in members can join games started from this group."
+        label="Let non-members join group games"
+        hint="Everyone has to sign in to join a group game. When this is off, only members of this group can join."
         checked={group.allowGuests}
         onChange={(v) => run('guests', () => api(`/api/groups/${group.id}`, { method: 'PATCH', body: { allowGuests: v } }))}
       />
@@ -371,7 +371,7 @@ export function GroupPage() {
     )
   }
 
-  const settingsDesc = group.settings ? describeSource(group.settings.source) : null
+  const settingsDesc = group.settings ? describeGame(group.settings) : null
 
   return (
     <Shell banner={false}>
@@ -380,7 +380,7 @@ export function GroupPage() {
           ← Groups
         </Link>
 
-        <section className="relative overflow-hidden rounded-2xl border border-gray-800 bg-linear-to-br from-gray-900 via-gray-900 to-violet-950/40 p-6 sm:p-8">
+        <section className="relative overflow-hidden rounded-2xl border border-gray-800 bg-linear-to-br from-gray-900 via-gray-900 to-fuchsia-950/40 p-6 sm:p-8">
           {params.has('created') && (
             <p className="mb-4 rounded-xl border border-brand-500/30 bg-brand-500/10 px-4 py-3 text-sm text-brand-100">
               🎉 Group created! Invite friends with the link below, then start a game whenever you’re together.

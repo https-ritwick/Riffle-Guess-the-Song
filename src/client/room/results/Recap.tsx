@@ -92,11 +92,11 @@ export function Recap({ slides, onClose }: { slides: Slide[]; onClose: () => voi
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-[#07060d] select-none" role="dialog" aria-label="Game recap" data-testid="recap">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-[#0d0716] select-none" role="dialog" aria-label="Game recap" data-testid="recap">
       {slide.art ? (
         <img key={slide.key + 'bg'} src={slide.art} alt="" aria-hidden="true" className="rise-in absolute inset-0 h-full w-full scale-125 object-cover opacity-40 blur-3xl" />
       ) : (
-        <div key={slide.key + 'bg'} className={clsx('rise-in absolute inset-0 bg-linear-to-br', slide.tone ?? 'from-violet-800/60 via-[#07060d] to-cyan-900/40')} />
+        <div key={slide.key + 'bg'} className={clsx('rise-in absolute inset-0 bg-linear-to-br', slide.tone ?? 'from-fuchsia-800/60 via-[#0d0716] to-amber-900/40')} />
       )}
       <div className="absolute inset-0 bg-linear-to-b from-black/40 via-transparent to-black/80" />
       <div className="vinyl absolute -right-40 -bottom-40 h-96 w-96 animate-[spin_8s_linear_infinite] rounded-full opacity-30" aria-hidden="true" />
@@ -175,10 +175,31 @@ export interface RecapInput {
   best: { best: number; isNew: boolean }
   awards: Award[]
   comeback: { p: PublicPlayer; from: number; to: number } | null
+  /** 'song', or 'question' for challenge games. */
+  noun?: string
+}
+
+/** A challenge round's prompt (dialogue or emojis), shown where a song would show its cover. */
+function PromptCard({ r }: { r: RoundStat['r'] }) {
+  const c = r.challenge
+  if (!c) return <BigCover src={r.track.artwork} />
+  if (r.track.artwork) return <BigCover src={r.track.artwork} />
+  return (
+    <div className="film-strip mx-auto mb-6 flex min-h-40 max-w-sm items-center justify-center rounded-2xl bg-black/40 px-6 py-8 ring-1 ring-white/10">
+      {c.kind === 'emoji' ? (
+        <span className="text-5xl tracking-widest">{c.prompt}</span>
+      ) : c.kind === 'actor' ? (
+        <span className="text-6xl">🌟</span>
+      ) : (
+        <span className="font-serif text-2xl text-amber-50 italic">“{c.prompt}”</span>
+      )}
+    </div>
+  )
 }
 
 export function buildSlides(x: RecapInput): Slide[] {
   const { stats, ranked, you, solo } = x
+  const noun = x.noun ?? 'song'
   const slides: Slide[] = []
   const covers = [...new Set(stats.map((s) => s.r.track.artwork).filter(Boolean))]
   const last = stats[stats.length - 1]?.r.track
@@ -210,7 +231,9 @@ export function buildSlides(x: RecapInput): Slide[] {
           ))}
         </div>
         <Eyebrow>That’s a wrap</Eyebrow>
-        <Big>{stats.length} songs</Big>
+        <Big>
+          {stats.length} {noun}s
+        </Big>
         <p className="mt-2 text-lg text-gray-300">{x.sourceTitle}</p>
         {!solo && <p className="mt-1 font-serif text-amber-100/90 italic">“Kitne aadmi the?” — {ranked.length}</p>}
       </>
@@ -221,12 +244,12 @@ export function buildSlides(x: RecapInput): Slide[] {
     const pct = Math.round((x.myRight / stats.length) * 100)
     slides.push({
       key: 'you',
-      tone: 'from-cyan-700/50 via-[#07060d] to-violet-800/50',
+      tone: 'from-brand-600/50 via-[#0d0716] to-rose-800/50',
       body: (
         <>
           <Eyebrow>Your night</Eyebrow>
-          <div className="mx-auto mb-6 flex h-44 w-44 items-center justify-center rounded-full p-2" style={{ background: `conic-gradient(#12dcef ${pct * 3.6}deg, rgba(255,255,255,0.1) 0)` }}>
-            <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-[#0b0a14]">
+          <div className="mx-auto mb-6 flex h-44 w-44 items-center justify-center rounded-full p-2" style={{ background: `conic-gradient(#ffc44d ${pct * 3.6}deg, rgba(255,255,255,0.1) 0)` }}>
+            <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-[#140b1f]">
               <span className="text-5xl font-black text-white tabular-nums">{pct}%</span>
               <span className="text-xs text-gray-400">accuracy</span>
             </div>
@@ -259,7 +282,7 @@ export function buildSlides(x: RecapInput): Slide[] {
         body: (
           <>
             <Eyebrow>Sabko pata tha</Eyebrow>
-            <BigCover src={known.r.track.artwork} />
+            <PromptCard r={known.r} />
             <h2 className="text-3xl font-black text-white">{known.r.track.title}</h2>
             <p className="mt-1 text-lg text-brand-200">{known.r.track.artist}</p>
             <p className="mt-4 text-gray-300">
@@ -278,10 +301,10 @@ export function buildSlides(x: RecapInput): Slide[] {
           <>
             <Eyebrow>{stumper.right === 0 ? 'Nobody got this one' : 'The stumper'}</Eyebrow>
             <Dialogue>“Yeh kya hua, kaise hua…”</Dialogue>
-            <BigCover src={stumper.r.track.artwork} />
+            <PromptCard r={stumper.r} />
             <h2 className="text-3xl font-black text-white">{stumper.r.track.title}</h2>
             <p className="mt-1 text-lg text-brand-200">{stumper.r.track.artist}</p>
-            <p className="mt-4 text-gray-300">{solo ? 'Remember this hook for next time.' : `Only ${stumper.right}/${stumper.players} named it`}</p>
+            <p className="mt-4 text-gray-300">{solo ? (noun === 'song' ? 'Remember this hook for next time.' : 'Remember this one for next time.') : `Only ${stumper.right}/${stumper.players} got it`}</p>
           </>
         ),
       })
@@ -293,7 +316,7 @@ export function buildSlides(x: RecapInput): Slide[] {
     const f = fastest.fastest
     slides.push({
       key: 'fastest',
-      tone: 'from-orange-600/60 via-[#07060d] to-red-900/60',
+      tone: 'from-orange-600/60 via-[#0d0716] to-red-900/60',
       body: (
         <>
           <Eyebrow>Fastest finger</Eyebrow>
@@ -314,7 +337,7 @@ export function buildSlides(x: RecapInput): Slide[] {
     const c = x.comeback
     slides.push({
       key: 'comeback',
-      tone: 'from-rose-700/60 via-[#07060d] to-black',
+      tone: 'from-rose-700/60 via-[#0d0716] to-black',
       body: (
         <>
           <Eyebrow>Comeback of the night</Eyebrow>
@@ -334,7 +357,7 @@ export function buildSlides(x: RecapInput): Slide[] {
   if (x.awards.length >= 2) {
     slides.push({
       key: 'awards',
-      tone: 'from-amber-700/40 via-[#07060d] to-fuchsia-900/50',
+      tone: 'from-amber-700/40 via-[#0d0716] to-fuchsia-900/50',
       ms: 5500,
       body: (
         <>
@@ -356,7 +379,7 @@ export function buildSlides(x: RecapInput): Slide[] {
     const heights = ['h-20', 'h-28', 'h-14']
     slides.push({
       key: 'winner',
-      tone: 'from-amber-600/40 via-[#07060d] to-violet-900/60',
+      tone: 'from-amber-600/40 via-[#0d0716] to-fuchsia-900/60',
       ms: 5500,
       body: (
         <>
@@ -386,14 +409,14 @@ export function buildSlides(x: RecapInput): Slide[] {
   } else if (solo) {
     slides.push({
       key: 'score',
-      tone: 'from-violet-700/60 via-[#07060d] to-pink-800/50',
+      tone: 'from-fuchsia-700/60 via-[#0d0716] to-pink-800/50',
       body: (
         <>
           <Eyebrow>{x.best.isNew ? 'New personal best!' : 'Your score'}</Eyebrow>
           {x.best.isNew && <Dialogue>“Mogambo khush hua!”</Dialogue>}
-          <h2 className="bg-linear-to-br from-brand-200 via-violet-300 to-pink-300 bg-clip-text text-7xl font-black text-transparent tabular-nums">{x.myScore.toLocaleString()}</h2>
+          <h2 className="bg-linear-to-br from-brand-200 via-brand-300 to-rose-300 bg-clip-text text-7xl font-black text-transparent tabular-nums">{x.myScore.toLocaleString()}</h2>
           <p className="mt-4 text-xl text-gray-200">
-            {x.myRight}/{stats.length} songs right
+            {x.myRight}/{stats.length} {noun}s right
           </p>
           {!x.best.isNew && x.best.best > 0 && <p className="mt-2 text-gray-400">Your best: {x.best.best.toLocaleString()}</p>}
         </>

@@ -1,7 +1,8 @@
 // Numbers and awards for the results screen and the recap, all derived from the
 // round history the server sends at the end of a game.
 import type { LucideIcon } from 'lucide-react'
-import { Bike, Clapperboard, Crown, EyeOff, Hourglass, Shield, Star, Target, TrendingUp, Zap } from 'lucide-react'
+import { Bike, Clapperboard, Crown, Dices, EyeOff, Ghost, Hourglass, Shield, Star, Target, TrendingUp, Zap } from 'lucide-react'
+import { AWARD_CATEGORIES, type AwardName } from '../../../shared/awards'
 import type { PublicPlayer, RoundSummary } from '../../../shared/protocol'
 
 export interface RoundStat {
@@ -87,8 +88,14 @@ export interface Award {
   detail: string
 }
 
-export function computeAwards(players: PublicPlayer[], history: RoundSummary[], stats: RoundStat[], solo: boolean): Award[] {
+/**
+ * The awards for a finished game. Titles and captions come from `names` (picked
+ * fresh for every game by the room, often written by AI); each award keeps its
+ * own icon and poster colours.
+ */
+export function computeAwards(players: PublicPlayer[], history: RoundSummary[], stats: RoundStat[], solo: boolean, names?: Record<string, AwardName> | null, noun = 'song'): Award[] {
   const awards: Award[] = []
+  const named = (id: string): AwardName => names?.[id] ?? AWARD_CATEGORIES.find((c) => c.id === id)!.names[0]!
   const byId = new Map(players.map((p) => [p.id, p]))
   const party = !solo && players.length > 1
 
@@ -96,8 +103,7 @@ export function computeAwards(players: PublicPlayer[], history: RoundSummary[], 
   if (fastest?.fastest) {
     awards.push({
       id: 'dhoom',
-      title: 'Dhoom Machale',
-      line: 'Fastest answer of the night',
+      ...named('dhoom'),
       icon: Bike,
       tone: 'from-orange-500 via-red-600 to-red-950',
       who: fastest.fastest.p.name,
@@ -110,8 +116,7 @@ export function computeAwards(players: PublicPlayer[], history: RoundSummary[], 
   if (streaker && streaker.bestStreak >= 2) {
     awards.push({
       id: 'don',
-      title: 'Don',
-      line: '“Don ko pakadna mushkil hi nahi, namumkin hai”',
+      ...named('don'),
       icon: Crown,
       tone: 'from-amber-500 via-stone-800 to-black',
       who: streaker.name,
@@ -130,8 +135,7 @@ export function computeAwards(players: PublicPlayer[], history: RoundSummary[], 
   if (sharp && sharp.acc > 0) {
     awards.push({
       id: 'perfectionist',
-      title: 'Mr. Perfectionist',
-      line: 'Barely missed a beat',
+      ...named('perfectionist'),
       icon: Target,
       tone: 'from-emerald-500 via-teal-700 to-teal-950',
       who: sharp.p.name,
@@ -146,8 +150,7 @@ export function computeAwards(players: PublicPlayer[], history: RoundSummary[], 
     if (comeback) {
       awards.push({
         id: 'baazigar',
-        title: 'Baazigar',
-        line: '“Haar kar jeetne waale ko Baazigar kehte hain”',
+        ...named('baazigar'),
         icon: TrendingUp,
         tone: 'from-rose-500 via-rose-800 to-black',
         who: comeback.p.name,
@@ -163,13 +166,12 @@ export function computeAwards(players: PublicPlayer[], history: RoundSummary[], 
     if (firstId && firstN && firstN >= 2) {
       awards.push({
         id: 'bullet-raja',
-        title: 'Bullet Raja',
-        line: 'First to the right answer, again and again',
+        ...named('bullet-raja'),
         icon: Zap,
         tone: 'from-cyan-400 via-blue-700 to-blue-950',
         who: byId.get(firstId)!.name,
         player: byId.get(firstId),
-        detail: `first in ${firstN} songs`,
+        detail: `first in ${firstN} ${noun}s`,
       })
     }
 
@@ -184,13 +186,12 @@ export function computeAwards(players: PublicPlayer[], history: RoundSummary[], 
     if (loneId && loneN && byId.get(loneId)) {
       awards.push({
         id: 'main-hoon-na',
-        title: 'Main Hoon Na',
-        line: 'Came through when nobody else could',
+        ...named('main-hoon-na'),
         icon: Shield,
         tone: 'from-sky-500 via-indigo-800 to-indigo-950',
         who: byId.get(loneId)!.name,
         player: byId.get(loneId),
-        detail: `only one to get ${loneN} song${loneN === 1 ? '' : 's'}`,
+        detail: `only one to get ${loneN} ${noun}${loneN === 1 ? '' : 's'}`,
       })
     }
 
@@ -206,8 +207,7 @@ export function computeAwards(players: PublicPlayer[], history: RoundSummary[], 
       if (slow) {
         awards.push({
           id: 'tareekh',
-          title: 'Tareekh Pe Tareekh',
-          line: 'Got there… eventually',
+          ...named('tareekh'),
           icon: Hourglass,
           tone: 'from-slate-500 via-slate-700 to-slate-950',
           who: slow.p.name,
@@ -218,19 +218,50 @@ export function computeAwards(players: PublicPlayer[], history: RoundSummary[], 
     }
   }
 
+  if (party && history.length >= 3) {
+    // Bold guesses that missed — and the quietest player — get a friendly roast.
+    const misses = players
+      .map((p) => ({ p, n: history.filter((r) => r.picks[p.id] && r.picks[p.id]!.choice !== null && !r.picks[p.id]!.correct).length }))
+      .sort((a, b) => b.n - a.n)
+    if (misses[0] && misses[0].n >= 2 && misses[0].n > (misses[1]?.n ?? 0)) {
+      awards.push({
+        id: 'risk',
+        ...named('risk'),
+        icon: Dices,
+        tone: 'from-lime-500 via-emerald-800 to-black',
+        who: misses[0].p.name,
+        player: misses[0].p,
+        detail: `${misses[0].n} brave wrong answers`,
+      })
+    }
+    const silent = players
+      .map((p) => ({ p, n: history.filter((r) => !r.picks[p.id] || r.picks[p.id]!.choice === null).length }))
+      .sort((a, b) => b.n - a.n)
+    if (silent[0] && silent[0].n >= 2 && silent[0].n > (silent[1]?.n ?? 0)) {
+      awards.push({
+        id: 'ghost',
+        ...named('ghost'),
+        icon: Ghost,
+        tone: 'from-zinc-400 via-zinc-800 to-black',
+        who: silent[0].p.name,
+        player: silent[0].p,
+        detail: `left ${silent[0].n} unanswered`,
+      })
+    }
+  }
+
   // Final song right (double points when that's on).
   const last = history[history.length - 1]
   const clutch = last && Object.entries(last.picks).filter(([id, p]) => p.correct && byId.has(id)).sort((a, b) => b[1].points - a[1].points)[0]
   if (clutch && history.length > 1) {
     awards.push({
       id: 'picture',
-      title: 'Picture Abhi Baaki Hai',
-      line: 'Saved the best for the last song',
+      ...named('picture'),
       icon: Clapperboard,
       tone: 'from-fuchsia-500 via-purple-800 to-purple-950',
       who: byId.get(clutch[0])!.name,
       player: byId.get(clutch[0]),
-      detail: `nailed the final song (+${clutch[1].points})`,
+      detail: `nailed the final ${noun} (+${clutch[1].points})`,
     })
   }
 
@@ -252,8 +283,7 @@ export function computeAwards(players: PublicPlayer[], history: RoundSummary[], 
     if (top) {
       awards.push({
         id: 'superstar',
-        title: 'Superstar',
-        line: 'Everyone knew their songs',
+        ...named('superstar'),
         icon: Star,
         tone: 'from-yellow-400 via-orange-600 to-orange-950',
         who: top[0],
@@ -264,8 +294,7 @@ export function computeAwards(players: PublicPlayer[], history: RoundSummary[], 
     if (bottom && bottom !== top) {
       awards.push({
         id: 'mr-india',
-        title: 'Mr. India',
-        line: 'Their songs stayed invisible',
+        ...named('mr-india'),
         icon: EyeOff,
         tone: 'from-blue-500 via-slate-800 to-black',
         who: bottom[0],

@@ -117,11 +117,10 @@ test('groups: create, invite by link and email, manage roles, play a members-onl
   await joinAs(bob.page, 'Bob')
   await expect.poll(() => playerNames(alice.page)).toHaveLength(2)
 
-  // Someone who isn't signed in can't join a members-only group game.
+  // Group games are for signed-in players: a stranger is asked to sign in before anything else.
   await stranger.page.goto(roomPath)
-  await stranger.page.getByLabel('Your name').fill('Sneaky')
-  await stranger.page.getByRole('button', { name: 'Join game' }).click()
-  await expect(stranger.page.getByRole('alert')).toContainText('Sign in to join')
+  await expect(stranger.page.getByRole('heading', { name: 'Sign in to join' })).toBeVisible()
+  await expect(stranger.page.getByLabel('Your name')).toHaveCount(0)
 
   // Play one round, end the game, and the result lands on the group leaderboard.
   await alice.page.getByRole('group', { name: 'Songs' }).getByRole('button', { name: '5', exact: true }).click()

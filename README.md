@@ -1,6 +1,6 @@
 # Riffle — name the song before your friends do
 
-A free, real-time music quiz. Play **solo** or create a room and share the link so everyone plays from their own phone. The same clip plays on every device at once. Players pick the right title (or artist) from four look-alike options, each shown with album art, and faster correct answers score more. **Blend** mixes every player's Spotify top tracks (or a playlist each) into one game. Playing needs no account; signing in with Google adds saved **groups** with a shared leaderboard.
+A free, real-time music quiz. Play **solo** or create a room and share the link so everyone plays from their own phone. The same clip plays on every device at once. Players pick the right title (or artist) from four look-alike options, each shown with album art, and faster correct answers score more. **Blend** mixes every player's Spotify (up to 300 songs each) and playlists into one game. Three **Bollywood challenges** need no audio: *Dialogue Baazi* (name the movie from a dialogue), *Star Spotting* (clues and "who said it?") and *Emoji Gaana* (name the song from emojis). Quick games need no account; signing in with Google adds saved **groups** with a shared leaderboard, and group games are for signed-in players.
 
 > Riffle was previously called *Encore*. The product name lives in `src/shared/brand.ts`. Cookie names and local-storage keys still use the old `encore` prefix; they're internal and invisible to players.
 
@@ -18,21 +18,38 @@ The original gameplay screen was modelled on the public parts of [Tapzz](https:/
 - **Beating the hook**: store previews are cut around the chorus, so the clip starts at a random point by default and plays continuously.
 - **Non-stop flow**: after each song the answer is revealed for 10 seconds while the song keeps playing, with a "Next song in …" countdown. The next song starts the moment it hits zero. The 3-2-1 countdown only opens the game.
 
+**Bollywood challenges** (pick them in the lobby under *What are we playing?*)
+- **🎬 Dialogue Baazi:** a famous dialogue appears (Sholay to Jawan); pick the movie. Wrong answers share the same star or era. The reveal shows who said it and what it means.
+- **🌟 Star Spotting:** three clues unlock over the timer, hardest first, so answering early scores more. Mixed with *"who said it?"* rounds where co-stars of the same film are the wrong answers.
+- **😎 Emoji Gaana:** a song spelled out in emojis. The real song (found on iTunes) plays at the reveal.
+- **Fresh every game:** about 60 dialogues, 60 stars and 60 emoji songs are built in. With a Google Gemini API key (see [Environment variables](#environment-variables)), Gemini writes ~20 new questions per mode in the background as soon as the host picks it, and they make up to 60% of each game. AI questions are schema-checked (three distinct wrong answers, no clue that names the star, emoji clues without letters, and so on), used once, and the room tells Gemini what it has already played.
+
+**Daily challenge, levels and sharing**
+- **📅 Aaj Ka Challenge:** five questions a day, the same for everyone, rotating between the three Bollywood challenges and resetting at midnight India time. One attempt each, with a live leaderboard on the home page (`GET /api/daily`, table `daily_scores`, migration 0004).
+- **Career:** every game earns XP towards nine filmi ranks (Junior Artist → Bollywood Ka Baadshah), keeps a day streak, and unlocks 14 badges (Pehli Picture, Dhoom, Hat-trick, Raat Baaki Hai…). Stored on the device.
+- **Streak hype:** a burst on the screen at 3, 4, 5, 7 and 10+ right answers in a row.
+- **Emoji songs play as soon as you crack them,** while everyone else is still thinking. AI emoji puzzles come with a word-by-word decode (shown at the reveal) and are only used when iTunes finds the song.
+- **Share sheet:** a Story-sized (9:16) or square result poster drawn in the browser with the game's album covers, for Instagram Story and WhatsApp Status through the phone's share sheet, plus WhatsApp chat, X, copy text, download, and a "beat my score" link that opens a solo game of the same mode with the challenge shown.
+
+**No repeats**
+- Every room remembers the songs and questions it has played and plays new ones first, in a fresh order, every game. The host's browser also remembers its last 800, so a brand-new room with the same crew still starts fresh, and groups carry their memory into the next group game.
+
 **Solo**
 - **Play solo** from the home page gives you a private room nobody else can join. You get a "Your run" panel (accuracy, streak, progress dots), can skip ahead after each reveal (Enter), and keep a personal best per music source and difficulty.
 
 **Blend (Spotify)**
-- Every player can **Connect Spotify** to add their top tracks (topped up with liked songs), or **add any playlist link**. The host picks the *✨ Blend* tab, and songs are interleaved so each player gets a fair share. Songs several players brought come first as *Blend matches*.
+- Every player can **Connect Spotify** to add a random 150 of their top tracks (last month, six months and all time) and liked songs, and **add playlist links** too: up to 3 sources and 300 songs per player. The host picks the *✨ Blend* tab, and songs are interleaved so each player gets a fair share. Songs nobody has heard in the room come first, and a few songs several players brought lead as *Blend matches*.
 - Players can disconnect Spotify any time from the account menu. That deletes their saved top tracks.
 - Every reveal shows **whose song it was**, and the results hand out *Crowd pleaser* and *Mystery DJ* awards.
 
 **Results**
 - A **story-style recap** (Spotify-Wrapped style) with filmi captions. Tap left or right to move and hold to pause. The last song keeps playing from its reveal into the first slide, then each song slide plays that song's hook. The slides cover your night (accuracy, streak, speed), plus *that's a wrap* with a cover collage, the song everyone knew, the stumper, the fastest finger, the comeback, an awards montage, and a podium finale (or your score and personal best when solo).
-- **Filmy awards**, styled as film posters:
+- **Filmy awards**, styled as film posters. Every category has a pool of Bollywood names, and each game draws new ones the room hasn't seen lately. With a Gemini API key, Gemini names them freshly every game from film titles, dialogues and trends, themed on the songs or questions you just played. The default names are:
   - *Dhoom Machale* for the fastest answer, *Don* for the longest streak and *Mr. Perfectionist* for accuracy.
   - *Baazigar* for the biggest comeback, *Bullet Raja* for the most first answers, and *Main Hoon Na* for songs only one player got.
   - *Picture Abhi Baaki Hai* for nailing the final song, and *Tareekh Pe Tareekh* for the slowest answers.
   - In Blend games, *Superstar* goes to the player whose music the room knew best, and *Mr. India* to the one whose songs stumped everyone.
+  - Two friendly roasts: *Golmaal* for the most wrong answers and *Itna Sannata Kyun Hai?* for the most unanswered ones.
 - A drifting **wall of every album cover** from the game, accuracy and streak stats, and a podium.
 - The game laid out **as an album**, Side A and Side B. Each track shows how many players got it, who was fastest, whose Blend it came from, and what you answered. Tap a cover to replay it on a spinning record.
 - A **Wordle-style share grid** (🟩🟥⬛).
@@ -50,7 +67,7 @@ The original gameplay screen was modelled on the public parts of [Tapzz](https:/
 - **Rooms:**
   - each room has a 4-letter code, a link, a QR code and a share button;
   - up to 16 players;
-  - no login needed.
+  - no login needed (except for group games).
 - **Settings:**
   - 5–20 songs and 10–30 seconds per song;
   - guess the title, the artist, or a mix;
@@ -63,7 +80,8 @@ The original gameplay screen was modelled on the public parts of [Tapzz](https:/
 - **Each round:**
   - a 3-2-1 countdown, a timer ring and an equalizer;
   - instant right/wrong feedback with sound effects and vibration;
-  - an album-cover flip that reveals the real artwork, everyone's picks, and emoji reactions.
+  - an album-cover flip that reveals the real artwork and everyone's picks;
+  - **40 emoji reactions** (🔥 😂 💀 🖕 🤡 🐐 …) that float up everyone's screen with the sender's name, from the lobby, after you answer, at the reveal and on the results.
 - **Live ranked leaderboard:** re-ranks the moment someone answers. Rows slide to their new place, and it shows rank arrows, answer times, streak flames and points earned.
 - **Results:**
   - confetti and a podium;
@@ -79,6 +97,7 @@ The original gameplay screen was modelled on the public parts of [Tapzz](https:/
   - cancel invites, and reset or disable the invite link;
   - allow or deny guests in group games.
 - **Members** can leave a group.
+- **Signed-in only:** joining a group and joining a group game both need Google sign-in. Admins can still choose whether signed-in non-members may join group games.
 - **One-tap group games:** any member can start a game for the group. Group pages and the home page show a live "● LIVE · 3 playing — Join" badge so members can jump straight in. Group games can be members-only.
 - **Group memory:** the group remembers its last settings. It keeps an all-time leaderboard (wins, games, points) and a list of recent games.
 
@@ -122,6 +141,8 @@ src/
     covers.json    real album artwork for tiles (scripts/build-covers.mjs)
     playlist.ts    Spotify / Apple Music link parser
     questions.ts   question builder with look-alike wrong answers
+    challenges/    Bollywood challenges: curated bank (data.ts) and question builder
+    awards.ts      award categories and their pools of filmy names
     rules.ts       scoring and timing · text.ts title cleanup and similarity
     spotify.ts     Spotify connection types
   worker/
@@ -131,6 +152,7 @@ src/
     groups.ts      groups, invites, roles, history, "play" for a group
     playlist.ts    public playlist reader + Spotify artwork
     spotify.ts     "Connect Spotify": OAuth, top tracks, preview lookup
+    ai.ts          Gemini: fresh challenge questions and award names (optional)
     rooms.ts / http.ts
   client/
     pages/         Home, RoomPage, GroupsPage, GroupPage, JoinGroupPage
@@ -155,7 +177,9 @@ tests/e2e          Playwright: multiplayer games, playlists, suggestions, groups
 | `games`, `game_players` | finished group games and per-player score, correct answers, rank |
 | `spotify_links` | a browser's Spotify connection: hashed cookie token, display name, photo, and the top tracks read at connect time (no Spotify tokens are kept) |
 
-Schema: `migrations/0001_init.sql`, `migrations/0002_spotify.sql`.
+`groups.played_json` (migration 0003) keeps the group's recently played song keys and question ids.
+
+Schema: `migrations/0001_init.sql` to `migrations/0004_daily.sql`.
 
 ## Run locally
 
@@ -189,6 +213,8 @@ npm run covers       # regenerate real tile artwork (paced, ~7 min)
 | `GOOGLE_CLIENT_SECRET` | Worker secret | Google OAuth client secret |
 | `SPOTIFY_CLIENT_ID` | Worker secret | Spotify app client id (optional; enables *Connect Spotify*) |
 | `SPOTIFY_CLIENT_SECRET` | Worker secret | Spotify app client secret |
+| `GEMINI_API_KEY` | Worker secret | Optional. Google Gemini writes fresh challenge questions and award names. Without it the built-in bank and award pools are used. |
+| `GEMINI_MODEL` | Worker variable | Optional. A Gemini model to try first (otherwise a built-in list of current Flash models is tried in order). |
 | `DEV_LOGIN` | `.dev.vars` only | `true` enables developer sign-in on localhost. Never set in production. |
 
 Bindings (in `wrangler.jsonc`): `ROOMS` (Durable Object), `DB` (D1 `riffle-db`), `CREATE_LIMITER` / `CONNECT_LIMITER` (rate limits), `ASSETS`.
@@ -244,6 +270,16 @@ npx wrangler d1 migrations apply riffle-db --remote
 
 **Development-mode limit:** new Spotify apps run in *development mode*, where only Spotify accounts you add under the app's **User Management** can connect (up to 25). Anyone else sees a message suggesting a playlist link instead. Wider access requires Spotify's extended-quota approval.
 
+### Turn on AI questions and award names (optional)
+
+Create a key at https://aistudio.google.com/apikey and store it as a Worker secret:
+
+```bash
+npx wrangler secret put GEMINI_API_KEY
+```
+
+Then open `/api/ai/health` on your site: it reports whether the key works and which model answered. Keys in the newer `AQ.` format are tried on the Gemini API first and on Vertex AI's express endpoint if the Gemini API rejects them. Each challenge game uses about one Gemini call to refill its questions, and each game one more for award names. Requests time out after 45 seconds, and a game never waits more than 15 seconds for them.
+
 ### Costs
 
 | Service | Used for | Cost |
@@ -251,6 +287,7 @@ npx wrangler d1 migrations apply riffle-db --remote
 | Cloudflare Workers, Durable Objects, D1 | hosting, WebSockets, rooms, accounts, groups | Free plan |
 | Google OAuth | sign-in | Free |
 | iTunes Search API, Apple/Spotify preview CDNs, Spotify embed & oEmbed | songs, previews, artwork, playlists | Free, no keys |
+| Google Gemini API (optional) | AI challenge questions and award names | Free tier, then pay per use |
 
 ## Security notes
 

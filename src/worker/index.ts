@@ -1,4 +1,6 @@
-import { ROOM_CODE_RE } from '../shared/protocol'
+import { dailyGame, dailyNumber, msUntilNextDaily, type DailyBoard } from '../shared/daily'
+import { DEFAULT_SETTINGS, GameKindSchema, ROOM_CODE_RE } from '../shared/protocol'
+import { aiHealth } from './ai'
 import { getSessionUser, handleAuth } from './auth'
 import { handleGroups, isGroupMember } from './groups'
 import { json } from './http'
@@ -33,8 +35,14 @@ async function handleRooms(request: Request, env: Env, url: URL): Promise<Respon
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
     const { success } = await env.CREATE_LIMITER.limit({ key: clientKey(request) })
     if (!success) return json({ error: 'Too many rooms created. Try again in a minute.' }, 429)
-    const body = (await request.json().catch(() => null)) as { solo?: unknown } | null
-    const code = await allocateRoom(env, { solo: body?.solo === true })
+    const body = (await request.json().catch(() => null)) as { solo?: unknown; daily?: unknown; game?: unknown } | null
+    // A preset game (from a "beat my score" link) or today's daily challenge.
+    const game = GameKindSchema.safeParse(body?.game)
+    const code = await allocateRoom(env, {
+      solo: body?.solo === true,
+      ...(body?.daily === true ? { daily: dailyNumber() } : {}),
+      ...(game.success ? { settings: { ...DEFAULT_SETTINGS, game: game.data } } : {}),
+    })
     return code ? json({ code }, 201) : json({ error: 'Could not allocate a room code. Please try again.' }, 503)
   }
 
@@ -66,6 +74,26 @@ async function handleRooms(request: Request, env: Env, url: URL): Promise<Respon
   return stub.fetch(new Request(request, { headers }))
 }
 
+/** Today's daily challenge leaderboard (and, with ?score=, where that score would rank). */
+async function dailyBoard(env: Env, url: URL): Promise<DailyBoard> {
+  const day = dailyNumber()
+  const score = Number(url.searchParams.get('score'))
+  const board: DailyBoard = { day, game: dailyGame(day), players: 0, top: [], rank: null, nextInMs: msUntilNextDaily() }
+  try {
+    const [count, top, better] = await env.DB.batch([
+      env.DB.prepare('SELECT COUNT(*) AS n FROM daily_scores WHERE day = ?').bind(day),
+      env.DB.prepare('SELECT name, score, correct, total FROM daily_scores WHERE day = ? ORDER BY score DESC, played_at ASC LIMIT 10').bind(day),
+      env.DB.prepare('SELECT COUNT(*) AS n FROM daily_scores WHERE day = ? AND score > ?').bind(day, Number.isFinite(score) ? score : 0),
+    ])
+    board.players = (count!.results[0] as { n: number }).n
+    board.top = top!.results as DailyBoard['top']
+    if (url.searchParams.has('score') && Number.isFinite(score)) board.rank = (better!.results[0] as { n: number }).n + 1
+  } catch (err) {
+    console.error('daily board failed (is migration 0004 applied?)', err)
+  }
+  return board
+}
+
 async function handlePlaylist(request: Request, env: Env, url: URL, ctx: ExecutionContext): Promise<Response | null> {
   if (url.pathname !== '/api/playlist') return null
   if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405)
@@ -89,6 +117,13 @@ export default {
 
     if (!pathname.startsWith('/api/')) return env.ASSETS.fetch(request)
     if (pathname === '/api/health') return json({ ok: true })
+    if (pathname === '/api/daily' && request.method === 'GET') return json(await dailyBoard(env, url))
+    // Is the optional AI (Gemini) set up and answering? Makes one tiny request, so it's rate-limited.
+    if (pathname === '/api/ai/health') {
+      const { success } = await env.CONNECT_LIMITER.limit({ key: `ai:${clientKey(request)}` })
+      if (!success) return json({ error: 'Too many requests. Try again in a minute.' }, 429)
+      return json(await aiHealth(env, url.searchParams.get('model')))
+    }
 
     // Cookie-authenticated writes must come from our own pages.
     if (request.method !== 'GET' && request.method !== 'HEAD' && !sameOrigin(request, url)) {

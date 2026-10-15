@@ -2,12 +2,20 @@
 // Every client message is validated with these schemas on the server.
 import { z } from 'zod'
 import { GUESS_SECONDS_OPTIONS, REGION_CODES, ROUND_OPTIONS } from './catalog'
+import type { AwardName } from './awards'
+import type { ChallengePrompt } from './challenges'
 import { REACTIONS } from './rules'
 
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
 export const ROOM_CODE_RE = /^[A-HJ-NP-Z]{4}$/
-/** Songs each player can add to a Blend. */
-export const MAX_BLEND_TRACKS = 50
+/** Songs a player can add to a Blend at once (one Spotify library or one playlist). */
+export const MAX_BLEND_TRACKS = 150
+/** Each player can add up to this many sources (Spotify + playlists) to a Blend… */
+export const MAX_BLEND_SOURCES = 3
+/** …holding at most this many songs in total. */
+export const MAX_BLEND_PER_PLAYER = 300
+/** Recently played songs/questions the host's browser asks the room to avoid. */
+export const MAX_AVOID = 800
 
 // ---------------------------------------------------------------------------
 // Tracks & settings
@@ -72,6 +80,9 @@ export type AnswerType = z.infer<typeof AnswerTypeSchema>
 export const DifficultySchema = z.enum(['easy', 'medium', 'hard'])
 export type Difficulty = z.infer<typeof DifficultySchema>
 
+/** What the game is about: songs (audio), or a Bollywood challenge. */
+export const GameKindSchema = z.enum(['songs', 'dialogue', 'actor', 'emoji'])
+
 const literalUnion = <T extends readonly number[]>(values: T) =>
   z.number().refine((v): v is T[number] => (values as readonly number[]).includes(v), 'invalid option')
 
@@ -88,6 +99,7 @@ const SettingsShape = {
   difficulty: DifficultySchema,
   /** Final song is worth double points. */
   doubleFinal: z.boolean(),
+  game: GameKindSchema,
 }
 
 export const SettingsSchema = z.object({
@@ -96,6 +108,7 @@ export const SettingsSchema = z.object({
   clipStart: SettingsShape.clipStart.default('random'),
   difficulty: SettingsShape.difficulty.default('hard'),
   doubleFinal: SettingsShape.doubleFinal.default(true),
+  game: SettingsShape.game.default('songs'),
 })
 export type Settings = z.infer<typeof SettingsSchema>
 
@@ -115,6 +128,7 @@ export const DEFAULT_SETTINGS: Settings = {
   clipStart: 'random',
   difficulty: 'hard',
   doubleFinal: true,
+  game: 'songs',
 }
 
 /** Fill in settings added after a room was created. */
@@ -133,7 +147,13 @@ export const ClientMessageSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('prepare') }),
   z.object({ t: z.literal('prepareFailed'), message: z.string().max(200) }),
   // A Blend game is built from the players' contributions, so its pool may be empty.
-  z.object({ t: z.literal('start'), pool: z.array(z.unknown()).max(400), settings: SettingsSchema.optional() }),
+  z.object({
+    t: z.literal('start'),
+    pool: z.array(z.unknown()).max(400),
+    settings: SettingsSchema.optional(),
+    /** Songs/questions this host played recently in other rooms; the room plays them last. */
+    avoid: z.array(z.string().max(200)).max(MAX_AVOID).optional(),
+  }),
   z.object({ t: z.literal('answer'), round: z.number().int().min(0), choice: z.number().int().min(0).max(3) }),
   z.object({ t: z.literal('kick'), playerId: z.string().max(40) }),
   z.object({ t: z.literal('makeHost'), playerId: z.string().max(40) }),
@@ -149,7 +169,8 @@ export const ClientMessageSchema = z.discriminatedUnion('t', [
     image: z.string().max(500).regex(ARTWORK_URL_RE).optional(),
     tracks: z.array(z.unknown()).min(1).max(MAX_BLEND_TRACKS),
   }),
-  z.object({ t: z.literal('unblend') }),
+  /** Remove one of your Blend sources, or all of them. */
+  z.object({ t: z.literal('unblend'), index: z.number().int().min(0).max(MAX_BLEND_SOURCES).optional() }),
 ])
 export type ClientMessage = z.infer<typeof ClientMessageSchema>
 
@@ -157,7 +178,8 @@ export type ClientMessage = z.infer<typeof ClientMessageSchema>
 // Server -> client
 
 export type Phase = 'lobby' | 'loading' | 'countdown' | 'question' | 'reveal' | 'results'
-export type QuestionMode = 'title' | 'artist'
+/** Songs: name the title or artist. Challenges: dialogue → movie, star clues, "who said it", emoji → song. */
+export type QuestionMode = 'title' | 'artist' | 'dialogue' | 'actor' | 'quote' | 'emoji'
 
 export interface PublicPlayer {
   id: string
@@ -196,6 +218,8 @@ export interface RevealInfo {
   picks: Record<string, Pick>
   /** Blend games: names of the players whose music this song came from. */
   owners: string[]
+  /** Emoji rounds whose clip the server couldn't fetch: the song for the browser to look up. */
+  find?: { title: string; movie: string }
 }
 
 export interface YourResult {
@@ -203,6 +227,10 @@ export interface YourResult {
   points: number
   first: boolean
   correctIndex: number
+  /** Emoji rounds: the song's clip, to play as soon as you've cracked it. */
+  song?: string | null
+  /** …or, when the server couldn't fetch it, the song for your browser to look up. */
+  find?: { title: string; movie: string }
 }
 
 export interface PublicRound {
@@ -226,6 +254,8 @@ export interface PublicRound {
   /** With live scoring: your own result, right after you answer. */
   yourResult: YourResult | null
   reveal: RevealInfo | null
+  /** Challenge rounds: the dialogue, emojis or clues to solve (no audio while answering). */
+  challenge: ChallengePrompt | null
   /** During the reveal: the next song's clip, so browsers can load it before it starts. */
   nextPreview: string | null
 }
@@ -239,11 +269,22 @@ export interface RoundSummary {
   track: Track
   picks: Record<string, Pick>
   owners: string[]
+  challenge?: ChallengePrompt | null
 }
 
 /** A player's contribution to a Blend (the songs themselves stay on the server). */
 export interface BlendEntry {
   playerId: string
+  /** The first source the player added (kept for older screens). */
+  via: 'spotify' | 'playlist'
+  label: string
+  image: string | null
+  /** Songs from all their sources together. */
+  count: number
+  sources: BlendSource[]
+}
+
+export interface BlendSource {
   via: 'spotify' | 'playlist'
   label: string
   image: string | null
@@ -265,6 +306,12 @@ export interface PublicState {
   /** Single-player room: nobody else can join. */
   solo: boolean
   blend: BlendEntry[]
+  /** Challenge games can include freshly AI-written questions on this server. */
+  ai: boolean
+  /** This game's names for the filmy awards, by award id (results only). */
+  awardNames: Record<string, AwardName> | null
+  /** Daily challenge rooms: the day number. */
+  daily: number | null
 }
 
 export type ServerMessage =
@@ -283,6 +330,8 @@ export interface RoomInfo {
   players: number
   group: { id: string; name: string } | null
   membersOnly: boolean
+  /** Group games: everyone has to sign in to join. */
+  signInRequired: boolean
   solo: boolean
 }
 

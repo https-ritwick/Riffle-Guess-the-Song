@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Check, Copy, Crown, Flame, Gauge, Headphones, Loader2, Lock, Play, QrCode, Share2, Sprout, UserX, Users, WifiOff } from 'lucide-react'
+import { Check, Copy, Crown, Flame, Gauge, Headphones, Loader2, Lock, Play, QrCode, Share2, Sparkles, Sprout, UserX, Users, WifiOff } from 'lucide-react'
 import qrcode from 'qrcode-generator'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
@@ -9,8 +9,9 @@ import { MAX_PLAYERS } from '../../shared/rules'
 import { useToast } from '../components/Toasts'
 import { Button, Card, PlayerAvatar, SectionTitle, Toggle } from '../components/ui'
 import { player as audio } from '../lib/audio'
-import { describeSource, DIFFICULTY_HINTS, difficultyLabel } from '../lib/source'
+import { describeSource, DIFFICULTY_HINTS, difficultyLabel, GAME_MODES, gameMode } from '../lib/source'
 import { useRoomContext } from './context'
+import { ReactionBar } from './Reactions'
 import { SelectedSource, SourcePicker } from './SourcePicker'
 import { useStartGame } from './useStartGame'
 import { BRAND } from '../../shared/brand'
@@ -84,7 +85,7 @@ function PlayersCard() {
       <SectionTitle right={<span className="text-sm text-gray-400">{online}/{MAX_PLAYERS}</span>}>Players</SectionTitle>
       <ul className="space-y-2" data-testid="player-list">
         {state.players.map((p) => (
-          <li key={p.id} className="flex items-center gap-3 rounded-xl bg-gray-800/40 px-3 py-2">
+          <li key={p.id} className="flex items-center gap-3 rounded-xl bg-white/[0.04] px-3 py-2">
             <PlayerAvatar avatar={p.avatar} photo={p.photo} name={p.name} dim={!p.connected} />
             <span className={clsx('min-w-0 flex-1 truncate font-semibold', p.connected ? 'text-white' : 'text-gray-500')}>
               {p.name}
@@ -123,7 +124,13 @@ function PlayersCard() {
           </li>
         ))}
       </ul>
-      {state.players.length < 2 && <p className="mt-3 text-sm text-gray-400">Share the link — or start now and play solo.</p>}
+      {state.players.length < 2 ? (
+        <p className="mt-3 text-sm text-gray-400">Share the link — or start now and play solo.</p>
+      ) : (
+        <div className="mt-4 border-t border-white/5 pt-3">
+          <ReactionBar compact />
+        </div>
+      )}
     </Card>
   )
 }
@@ -179,7 +186,7 @@ function HostOnlyNote({ what }: { what: string }) {
 
 const DIFFICULTIES: { id: Difficulty; icon: typeof Sprout; tone: string }[] = [
   { id: 'easy', icon: Sprout, tone: 'from-emerald-400/25 ring-emerald-400/60' },
-  { id: 'medium', icon: Gauge, tone: 'from-violet-400/25 ring-violet-400/60' },
+  { id: 'medium', icon: Gauge, tone: 'from-fuchsia-400/25 ring-fuchsia-400/60' },
   { id: 'hard', icon: Flame, tone: 'from-pink-500/30 ring-pink-400/70' },
 ]
 
@@ -216,6 +223,7 @@ function SettingsCard() {
   const { state, isHost, send } = useRoomContext()
   const s = state.settings
   const update = (patch: Partial<Settings>) => send({ t: 'settings', settings: patch })
+  const songs = s.game === 'songs'
 
   return (
     <Card>
@@ -225,8 +233,9 @@ function SettingsCard() {
         <DifficultyPicker value={s.difficulty} onChange={(difficulty) => update({ difficulty })} disabled={!isHost} />
       </div>
       <div className="grid gap-5 sm:grid-cols-2">
-        <Segmented label="Songs" value={s.rounds} options={ROUND_OPTIONS} onChange={(rounds) => update({ rounds })} disabled={!isHost} />
+        <Segmented label={songs ? 'Songs' : 'Questions'} value={s.rounds} options={ROUND_OPTIONS} onChange={(rounds) => update({ rounds })} disabled={!isHost} />
         <Segmented label="Seconds to guess" value={s.guessSeconds} options={GUESS_SECONDS_OPTIONS} format={(v) => `${v}s`} onChange={(guessSeconds) => update({ guessSeconds })} disabled={!isHost} />
+        {songs && (
         <Segmented
           label="Guess the"
           value={s.answerType}
@@ -235,6 +244,8 @@ function SettingsCard() {
           onChange={(answerType) => update({ answerType })}
           disabled={!isHost}
         />
+        )}
+        {songs && (
         <label className="block">
           <span className="mb-2 block text-sm font-medium text-gray-300">Music store region</span>
           <select
@@ -250,17 +261,20 @@ function SettingsCard() {
             ))}
           </select>
         </label>
+        )}
       </div>
       <div className="mt-6 grid gap-4 border-t border-gray-800 pt-5 sm:grid-cols-3">
         <Toggle label="Live scoring" hint="Points land the moment you answer" checked={s.liveScoring} disabled={!isHost} onChange={(liveScoring) => update({ liveScoring })} />
-        <Toggle
-          label="Random clip start"
-          hint="Skip past the opening hook"
-          checked={s.clipStart === 'random'}
-          disabled={!isHost}
-          onChange={(v) => update({ clipStart: v ? 'random' : 'start' })}
-        />
-        <Toggle label="Double final round" hint="Last song scores ×2" checked={s.doubleFinal} disabled={!isHost} onChange={(doubleFinal) => update({ doubleFinal })} />
+        {songs && (
+          <Toggle
+            label="Random clip start"
+            hint="Skip past the opening hook"
+            checked={s.clipStart === 'random'}
+            disabled={!isHost}
+            onChange={(v) => update({ clipStart: v ? 'random' : 'start' })}
+          />
+        )}
+        <Toggle label="Double final round" hint={songs ? 'Last song scores ×2' : 'Last question scores ×2'} checked={s.doubleFinal} disabled={!isHost} onChange={(doubleFinal) => update({ doubleFinal })} />
       </div>
     </Card>
   )
@@ -285,13 +299,13 @@ function StartBar() {
           }}
           data-testid="start-game"
         >
-          {busy ? 'Loading songs…' : 'Start game'}
+          {busy ? (state.settings.game === 'songs' ? 'Loading songs…' : 'Setting the stage…') : 'Start game'}
         </Button>
       ) : (
         <div className="flex h-12 items-center justify-center gap-2 rounded-xl border border-gray-800 bg-gray-900/80 text-gray-300">
           {state.phase === 'loading' ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin text-brand-400" /> Loading songs…
+              <Loader2 className="h-4 w-4 animate-spin text-brand-400" /> {state.settings.game === 'songs' ? 'Loading songs…' : 'Setting the stage…'}
             </>
           ) : (
             <>Waiting for {host?.name ?? 'the host'} to start…</>
@@ -304,10 +318,10 @@ function StartBar() {
 
 /** Solo rooms: no invites or player list, just you and the music. */
 function SoloCard() {
-  const { me } = useRoomContext()
+  const { me, state } = useRoomContext()
   return (
     <Card className="relative overflow-hidden">
-      <div className="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full bg-violet-500/20 blur-3xl" />
+      <div className="pointer-events-none absolute -top-16 -right-16 h-48 w-48 rounded-full bg-fuchsia-500/20 blur-3xl" />
       <div className="relative flex items-center gap-3">
         {me && <PlayerAvatar avatar={me.avatar} photo={me.photo} name={me.name} size="lg" />}
         <div>
@@ -317,15 +331,129 @@ function SoloCard() {
       </div>
       <ul className="relative mt-4 space-y-2 text-sm text-gray-300">
         <li className="flex gap-2">
-          <Headphones className="h-4 w-4 shrink-0 text-brand-300" /> Pick any music, then beat your personal best.
+          <Headphones className="h-4 w-4 shrink-0 text-brand-300" />{' '}
+          {state.daily ? 'Answer fast — your score goes on today’s leaderboard.' : 'Pick any game, then beat your personal best.'}
         </li>
         <li className="flex gap-2">
           <Play className="h-4 w-4 shrink-0 text-brand-300" /> Skip ahead after each reveal with <kbd className="rounded bg-gray-800 px-1">Enter</kbd>.
         </li>
       </ul>
-      <Link to="/" className="relative mt-4 inline-block text-sm font-semibold text-violet-300 hover:text-violet-200">
+      <Link to="/" className="relative mt-4 inline-block text-sm font-semibold text-fuchsia-300 hover:text-fuchsia-200">
         Want company? Start a party game →
       </Link>
+    </Card>
+  )
+}
+
+const SAMPLES: Record<string, { label: string; body: string }[]> = {
+  dialogue: [
+    { label: 'Dialogue', body: '“Kitne aadmi the?”' },
+    { label: 'Dialogue', body: '“Bade bade deshon mein…”' },
+  ],
+  actor: [
+    { label: 'Clue 1', body: 'Was turned down by All India Radio for his voice…' },
+    { label: 'Who said it?', body: '“Mogambo khush hua!”' },
+  ],
+  emoji: [
+    { label: 'Song', body: '🚂🕺🌳☀️' },
+    { label: 'Song', body: '📅➡️🤷❓' },
+  ],
+}
+
+/** Daily challenge rooms: same five questions for everyone today, one attempt. */
+function DailyIntro() {
+  const { state } = useRoomContext()
+  const mode = gameMode(state.settings.game)
+  return (
+    <Card className="relative overflow-hidden">
+      <div className={clsx('pointer-events-none absolute inset-0 bg-linear-to-br opacity-80', mode.tone)} />
+      <div className="relative">
+        <p className="text-xs font-bold tracking-[0.25em] text-brand-200 uppercase">Aaj Ka Challenge · #{state.daily}</p>
+        <h2 className="mt-1 text-3xl font-black text-white">
+          {mode.emoji} {mode.title}
+        </h2>
+        <p className="mt-2 text-gray-200">{mode.how}</p>
+        <ul className="mt-4 grid gap-2 text-sm text-gray-200 sm:grid-cols-3">
+          <li className="rounded-xl bg-black/30 px-3 py-2 ring-1 ring-white/10">🎯 {state.settings.rounds} questions, same for everyone</li>
+          <li className="rounded-xl bg-black/30 px-3 py-2 ring-1 ring-white/10">⏱️ {state.settings.guessSeconds}s each — faster scores more</li>
+          <li className="rounded-xl bg-black/30 px-3 py-2 ring-1 ring-white/10">🏆 One attempt on today’s leaderboard</li>
+        </ul>
+      </div>
+    </Card>
+  )
+}
+
+/** What are we playing tonight: songs, or one of the Bollywood challenges. */
+function GamePicker() {
+  const { state, isHost, send } = useRoomContext()
+  const current = state.settings.game
+  return (
+    <Card>
+      <SectionTitle right={!isHost && <span className="text-xs text-gray-500">Host picks</span>}>What are we playing?</SectionTitle>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" role="radiogroup" aria-label="Game">
+        {GAME_MODES.map((m) => {
+          const on = m.id === current
+          return (
+            <button
+              key={m.id}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              disabled={!isHost}
+              onClick={() => send({ t: 'settings', settings: { game: m.id } })}
+              data-testid={`mode-${m.id}`}
+              className={clsx(
+                'group relative flex flex-col items-start overflow-hidden rounded-2xl border p-3.5 text-left transition-all disabled:cursor-default',
+                on ? 'ring-marquee border-transparent bg-white/[0.07] shadow-lg shadow-rose-500/10' : 'border-white/10 bg-white/[0.02] enabled:hover:-translate-y-0.5 enabled:hover:border-white/25',
+              )}
+            >
+              <span className={clsx('pointer-events-none absolute inset-0 bg-linear-to-br transition-opacity', m.tone, on ? 'opacity-100' : 'opacity-0 group-hover:opacity-60')} />
+              <span className="relative mb-3 text-3xl drop-shadow-lg transition-transform group-hover:scale-110" aria-hidden="true">
+                {m.emoji}
+              </span>
+              <span className="relative block font-extrabold text-white">{m.title}</span>
+              <span className="relative block text-xs leading-snug text-gray-300">{m.tagline}</span>
+              {on && (
+                <span className="absolute top-2.5 right-2.5 flex h-6 w-6 items-center justify-center rounded-full bg-brand-400 text-black">
+                  <Check className="h-3.5 w-3.5" />
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+    </Card>
+  )
+}
+
+/** Challenge games need no music: explain the round and show a taste of it. */
+function ChallengeCard() {
+  const { state } = useRoomContext()
+  const mode = gameMode(state.settings.game)
+  return (
+    <Card className="relative overflow-hidden">
+      <div className={clsx('pointer-events-none absolute inset-0 bg-linear-to-br opacity-70', mode.tone)} />
+      <div className="relative grid gap-5 sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] sm:items-center">
+        <div>
+          <p className="text-xs font-bold tracking-[0.25em] text-brand-200 uppercase">Bollywood challenge</p>
+          <h2 className="mt-1 text-3xl font-black text-white">
+            {mode.emoji} {mode.title}
+          </h2>
+          <p className="mt-2 text-gray-200">{mode.how}</p>
+          <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-black/30 px-3 py-1.5 text-xs font-semibold text-gray-200 ring-1 ring-white/10">
+            <Sparkles className="h-3.5 w-3.5 text-brand-300" />
+            {state.ai ? 'Fresh AI-written questions every game, mixed with all-time classics' : 'Hand-picked classics — no repeats until you’ve seen them all'}
+          </p>
+        </div>
+        <div className="space-y-2" aria-hidden="true">
+          {(SAMPLES[mode.id] ?? []).map((x, i) => (
+            <div key={i} className="film-strip rounded-xl bg-black/50 px-4 py-4 ring-1 ring-white/10" style={{ transform: `rotate(${i ? 1.5 : -1.5}deg)` }}>
+              <p className="text-[10px] font-bold tracking-[0.25em] text-gray-400 uppercase">{x.label}</p>
+              <p className="mt-1 font-serif text-lg text-amber-50 italic">{x.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
     </Card>
   )
 }
@@ -338,12 +466,12 @@ export function Lobby() {
   return (
     <main className="mx-auto w-full max-w-6xl px-4 pb-28 lg:pb-10">
       {state.group && (
-        <div className="mb-4 flex items-center gap-2 rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-3 text-sm text-violet-100">
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 px-4 py-3 text-sm text-fuchsia-100">
           <Users className="h-4 w-4 shrink-0" />
           <span>
             Group game for <span className="font-bold">{state.group.name}</span> — results are saved to the group’s leaderboard.
           </span>
-          <Link to={`/groups/${state.group.id}`} className="ml-auto shrink-0 font-semibold text-violet-200 underline-offset-2 hover:underline">
+          <Link to={`/groups/${state.group.id}`} className="ml-auto shrink-0 font-semibold text-fuchsia-200 underline-offset-2 hover:underline">
             Group page
           </Link>
         </div>
@@ -355,19 +483,30 @@ export function Lobby() {
       )}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="order-2 space-y-6 lg:order-1">
-          <Card>
-            <SectionTitle>{isHost ? 'Choose the music' : 'Music'}</SectionTitle>
-            <div className="mb-5 rounded-xl border border-gray-800 bg-gray-800/30 p-4">
-              <SelectedSource source={state.settings.source} size="lg" />
-            </div>
-            {!isHost && (
-              <p className="mb-4 flex items-center gap-2 rounded-lg bg-gray-800/50 px-3 py-2 text-sm text-gray-400">
-                <Lock className="h-4 w-4 shrink-0" /> Only the host can change the music — tap anything below to suggest it.
-              </p>
-            )}
-            <SourcePicker onSuggested={(s) => toast({ title: 'Suggestion sent', body: `Asked the host to play ${describeSource(s).title}.`, tone: 'success', durationMs: 3000 })} />
-          </Card>
-          <SettingsCard />
+          {state.daily ? (
+            <DailyIntro />
+          ) : (
+          <>
+          <GamePicker />
+          {state.settings.game === 'songs' ? (
+            <Card>
+              <SectionTitle>{isHost ? 'Choose the music' : 'Music'}</SectionTitle>
+              <div className="mb-5 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <SelectedSource source={state.settings.source} size="lg" />
+              </div>
+              {!isHost && (
+                <p className="mb-4 flex items-center gap-2 rounded-lg bg-white/[0.04] px-3 py-2 text-sm text-gray-400">
+                  <Lock className="h-4 w-4 shrink-0" /> Only the host can change the music — tap anything below to suggest it.
+                </p>
+              )}
+              <SourcePicker onSuggested={(s) => toast({ title: 'Suggestion sent', body: `Asked the host to play ${describeSource(s).title}.`, tone: 'success', durationMs: 3000 })} />
+            </Card>
+          ) : (
+            <ChallengeCard />
+          )}
+          </>
+          )}
+          {!state.daily && <SettingsCard />}
         </div>
         <aside className="order-1 space-y-6 lg:order-2">
           {state.solo ? (

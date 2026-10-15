@@ -10,3 +10,8 @@ GOOGLE_CLIENT_SECRET=
 # then open the app at http://127.0.0.1:5290 instead of localhost.
 SPOTIFY_CLIENT_ID=
 SPOTIFY_CLIENT_SECRET=
+# Optional: AI-written questions for the Dialogue / Star / Emoji challenges and fresh award
+# names every game, from Google Gemini. Get a key at https://aistudio.google.com/apikey
+# (the games work without it). GEMINI_MODEL optionally picks a model to try first.
+GEMINI_API_KEY=
+GEMINI_MODEL=

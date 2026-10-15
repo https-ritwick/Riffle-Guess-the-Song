@@ -33,11 +33,22 @@ interface GroupRow {
   invite_enabled: number
   allow_guests: number
   settings_json: string | null
+  /** Recently played song keys / challenge ids (migration 0003; missing on older databases). */
+  played_json?: string | null
   active_room: string | null
   active_room_at: number | null
 }
 
 type Role = 'admin' | 'member'
+
+function playedList(raw: string | null | undefined): string[] {
+  try {
+    const list: unknown = raw ? JSON.parse(raw) : []
+    return Array.isArray(list) ? list.filter((k): k is string => typeof k === 'string' && k.length <= 200).slice(-600) : []
+  } catch {
+    return []
+  }
+}
 
 function inviteCode(): string {
   return randomToken(9).replace(/[-_]/g, 'x').slice(0, 10)
@@ -301,6 +312,7 @@ export async function handleGroups(request: Request, env: Env, url: URL, user: S
       allowGuests: !!group.allow_guests,
       hostUserId: user.id,
       settings: group.settings_json ? normalizeSettings(JSON.parse(group.settings_json)) : null,
+      played: playedList(group.played_json),
     })
     if (!code) return json({ error: 'Could not create a room. Try again.' }, 503)
     await env.DB.prepare('UPDATE groups SET active_room = ?, active_room_at = ? WHERE id = ?').bind(code, Date.now(), group.id).run()

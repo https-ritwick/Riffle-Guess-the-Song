@@ -1,7 +1,9 @@
-import { ArrowRight, ChevronLeft, Disc3, Hash, Headphones, Loader2, PartyPopper, Plus, Sparkles, Trophy, User, Users, Zap } from 'lucide-react'
+import clsx from 'clsx'
+import { ArrowRight, ChevronLeft, Disc3, Hash, Headphones, Loader2, PartyPopper, Plus, Smile, Sparkles, Trophy, User, Users } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { ROOM_CODE_RE } from '../../shared/protocol'
+import { BeatBanner, CareerCard, DailyCard } from '../components/Engage'
 import { GroupCard, InviteCard } from '../components/GroupCards'
 import { Shell } from '../components/Shell'
 import { useToast } from '../components/Toasts'
@@ -11,6 +13,8 @@ import { player } from '../lib/audio'
 import { useAuth } from '../lib/auth'
 import { FEATURED_WITH_COVERS } from '../lib/covers'
 import { useMyGroups } from '../lib/groups'
+import { useProgress } from '../lib/progress'
+import { GAME_MODES } from '../lib/source'
 import { fetchRoomInfo } from '../lib/useRoom'
 import { BRAND } from '../../shared/brand'
 
@@ -45,7 +49,7 @@ function MyGroups() {
           <Users className="mx-auto mb-2 h-8 w-8 text-gray-500" />
           <p className="font-semibold text-white">No groups yet</p>
           <p className="mb-4 text-sm text-gray-400">Save your crew once, then start a game for everyone in one tap.</p>
-          <Link to="/groups?new=1" className="inline-flex h-10 items-center gap-2 rounded-xl bg-linear-to-r from-brand-500 to-violet-500 px-4 font-bold text-black">
+          <Link to="/groups?new=1" className="inline-flex h-10 items-center gap-2 rounded-xl bg-linear-to-r from-brand-400 to-rose-500 px-4 font-bold text-black">
             <Plus className="h-4 w-4" /> Create a group
           </Link>
         </Card>
@@ -60,18 +64,54 @@ function MyGroups() {
   )
 }
 
+/** The four ways to play, as film-poster cards. */
+function ModeShowcase() {
+  const samples: Record<string, string> = {
+    songs: '♪ ♫ ♪ ♫',
+    dialogue: '“Mogambo khush hua!”',
+    actor: 'Clue 1 · Hosts KBC…',
+    emoji: '🚂🕺🌳☀️',
+  }
+  return (
+    <section aria-labelledby="modes" className="space-y-4">
+      <SectionTitle>
+        <span id="modes">Four ways to play</span>
+      </SectionTitle>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {GAME_MODES.map((m, i) => (
+          <div key={m.id} className="rise-in glass group relative overflow-hidden rounded-3xl p-5 transition hover:-translate-y-1" style={{ animationDelay: `${i * 0.08}s` }}>
+            <div className={`pointer-events-none absolute inset-0 bg-linear-to-br opacity-80 ${m.tone}`} />
+            <div className="relative">
+              <span className="mb-4 block text-4xl drop-shadow-lg transition-transform group-hover:scale-110 group-hover:-rotate-6" aria-hidden="true">
+                {m.emoji}
+              </span>
+              <p className="text-lg font-black text-white">{m.title}</p>
+              <p className="mt-1 text-sm text-gray-300">{m.how}</p>
+              <p className="film-strip mt-4 truncate rounded-xl bg-black/40 px-3 py-3 text-center font-serif text-amber-50 italic ring-1 ring-white/10" aria-hidden="true">
+                {samples[m.id]}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function Features() {
   const items = [
-    { icon: Sparkles, title: 'Spotify Blend', body: 'Everyone connects Spotify (or drops a playlist). Songs are mixed fairly and each reveal shows whose track it was.' },
-    { icon: Disc3, title: 'Look-alike answers', body: 'Wrong options come from the same singer, movie or era, with album art to match. On Hard, a wrong guess costs 100 points.' },
-    { icon: Zap, title: 'Race the room', body: 'Faster right answers score more, the first right answer earns a ⚡ bonus, and the leaderboard re-ranks live.' },
-    { icon: Trophy, title: 'Recaps & groups', body: 'A story-style recap after every game, a shareable result grid, and saved groups with all-time leaderboards.' },
+    { icon: Sparkles, title: 'Bigger Spotify Blends', body: 'Everyone adds their Spotify (up to 300 songs each) and playlists. New songs play first every game — no repeats in the same order.' },
+    { icon: Disc3, title: 'Look-alike answers', body: 'Wrong options come from the same singer, movie or era. On Hard, a wrong guess costs 100 points.' },
+    { icon: Smile, title: '40 reactions', body: 'Roast your friends live with 🔥, 💀, 🤡, 🖕 and 36 more — floating up everyone’s screen.' },
+    { icon: Trophy, title: 'Filmy awards', body: 'Fresh Bollywood-dialogue award names every game, a story-style recap, and group leaderboards.' },
   ]
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {items.map(({ icon: Icon, title, body }) => (
-        <div key={title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-          <Icon className="mb-3 h-6 w-6 text-brand-400" />
+        <div key={title} className="glass rounded-2xl p-5">
+          <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-linear-to-br from-brand-300 to-rose-500 text-black shadow-lg shadow-rose-500/20">
+            <Icon className="h-5 w-5" />
+          </span>
           <p className="font-bold text-white">{title}</p>
           <p className="mt-1 text-sm text-gray-400">{body}</p>
         </div>
@@ -84,6 +124,7 @@ export function Home() {
   const navigate = useNavigate()
   const toast = useToast()
   const { me, loading: authLoading } = useAuth()
+  const progress = useProgress()
   const [params, setParams] = useSearchParams()
   const [step, setStep] = useState<'menu' | 'join'>(params.has('join') ? 'join' : 'menu')
   const [code, setCode] = useState('')
@@ -95,6 +136,11 @@ export function Home() {
     document.title = `${BRAND.name} — ${BRAND.tagline.replace(/\.$/, '')}`
     if (step === 'join') codeInput.current?.focus()
   }, [step])
+
+  // Shared daily links land on the daily card.
+  useEffect(() => {
+    if (params.has('daily')) document.getElementById('daily')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [params])
 
   useEffect(() => {
     const err = params.get('login_error')
@@ -146,12 +192,15 @@ export function Home() {
     <Shell>
       <main className="relative mx-auto w-full max-w-6xl space-y-14 px-4 pt-6 pb-16 sm:pt-12">
         <div className="relative z-10 mx-auto w-full max-w-2xl">
+          <BeatBanner params={params} />
           <div className="mb-10 text-center">
             <h1 className="mb-5">
               <Logo />
             </h1>
-            <p className="bg-linear-to-r from-white via-brand-100 to-violet-200 bg-clip-text text-4xl leading-tight font-black text-transparent sm:text-5xl">{BRAND.tagline}</p>
-            <p className="mx-auto mt-3 max-w-lg text-gray-400">A few seconds of audio, four look-alike answers, one winner. Play solo, with friends, or with everyone’s Spotify blended together.</p>
+            <p className="bg-linear-to-r from-white via-brand-100 to-fuchsia-200 bg-clip-text text-4xl leading-tight font-black text-transparent sm:text-5xl">{BRAND.tagline}</p>
+            <p className="mx-auto mt-3 max-w-lg text-gray-300">
+              Name the song from a few seconds of audio — or switch to <span className="font-semibold text-white">Bollywood dialogues, star clues and emoji songs</span>. Solo, with friends, or with everyone’s Spotify blended together.
+            </p>
           </div>
 
           {step === 'menu' ? (
@@ -161,7 +210,7 @@ export function Home() {
                   type="button"
                   onClick={() => createRoom(false)}
                   disabled={!!busy}
-                  className="group relative overflow-hidden rounded-2xl bg-linear-to-br from-brand-500 via-violet-500 to-pink-500 p-5 text-left text-black shadow-xl shadow-violet-500/20 transition hover:-translate-y-0.5 disabled:opacity-70"
+                  className="group relative overflow-hidden rounded-2xl bg-linear-to-br from-brand-300 via-brand-500 to-rose-500 p-5 text-left text-black shadow-xl shadow-rose-500/25 transition hover:-translate-y-0.5 hover:shadow-rose-500/40 disabled:opacity-70"
                 >
                   <PartyPopper className="mb-6 h-7 w-7" />
                   <span className="block text-xl font-black">Create a game</span>
@@ -198,11 +247,11 @@ export function Home() {
                 </p>
               )}
 
-              <div className="mt-6 flex gap-3 rounded-xl border border-teal-500/30 bg-teal-950/40 p-4 text-sm text-gray-300">
-                <Headphones className="mt-0.5 h-5 w-5 shrink-0 text-teal-400" />
+              <div className="mt-6 flex gap-3 rounded-xl border border-brand-400/25 bg-brand-500/10 p-4 text-sm text-gray-300">
+                <Headphones className="mt-0.5 h-5 w-5 shrink-0 text-brand-300" />
                 <p>
-                  <span className="font-bold text-white">Free, no account needed to play.</span> Everyone plays on their own phone and hears the same clip at
-                  the same time. Sign in with Google to save groups and stats.
+                  <span className="font-bold text-white">Free, no account needed for quick games.</span> Everyone plays on their own phone and hears the same clip at
+                  the same time. Sign in with Google for groups — group games are for signed-in players.
                 </p>
               </div>
             </div>
@@ -248,7 +297,14 @@ export function Home() {
           )}
         </div>
 
+        <div className={clsx('grid gap-6', progress.games > 0 && 'lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]')}>
+          <DailyCard highlight={params.has('daily')} />
+          <CareerCard />
+        </div>
+
         {me && <MyGroups />}
+
+        <ModeShowcase />
 
         <section aria-labelledby="featured" className="space-y-4">
           <SectionTitle>

@@ -71,34 +71,44 @@ export const SPOTIFY_ERRORS: Record<string, string> = {
 }
 
 /**
- * The listener's top tracks as playable Blend songs. Previews are looked up until
- * there are enough (a few tracks on Spotify have none).
+ * The listener's songs as playable Blend songs: a fresh random selection from
+ * their top and liked tracks every time, looked up until there are enough with a
+ * preview clip (a few tracks on Spotify have none).
  */
-export async function spotifyBlendTracks(me: Extract<SpotifyMe, { connected: true }>): Promise<Track[]> {
-  const want = 30
+export async function spotifyBlendTracks(me: Extract<SpotifyMe, { connected: true }>, onProgress?: (found: number) => void): Promise<Track[]> {
+  const want = MAX_BLEND_TRACKS
   const tracks: Track[] = []
-  const candidates = me.tracks.slice(0, 60)
-  for (let i = 0; i < candidates.length && tracks.length < want; i += PREVIEW_BATCH) {
-    const chunk = candidates.slice(i, i + PREVIEW_BATCH)
-    const previews = await resolvePreviews(chunk.map((t) => t.id))
-    for (const t of chunk) {
-      const preview = previews[t.id]
-      if (!preview) continue
-      tracks.push({
-        id: `sp:${t.id}`,
-        title: t.title,
-        artist: t.artist,
-        album: t.album,
-        artwork: t.artwork,
-        preview,
-        link: `https://open.spotify.com/track/${t.id}`,
-        year: t.year,
-        spotifyId: t.id,
-      })
-    }
+  // Favourites first (the top of the list), but shuffled within, so every Blend is different.
+  const top = me.tracks.slice(0, 60)
+  const rest = me.tracks.slice(60)
+  const candidates = [...shuffle(top, Math.random), ...shuffle(rest, Math.random)]
+  const chunks: (typeof candidates)[] = []
+  for (let i = 0; i < candidates.length; i += PREVIEW_BATCH) chunks.push(candidates.slice(i, i + PREVIEW_BATCH))
+  // Three lookups at a time keeps it quick without tripping the rate limit.
+  for (let i = 0; i < chunks.length && tracks.length < want; i += 3) {
+    const batch = chunks.slice(i, i + 3)
+    const results = await Promise.all(batch.map((chunk) => resolvePreviews(chunk.map((t) => t.id)).catch(() => ({}) as Record<string, string | null>)))
+    batch.forEach((chunk, n) => {
+      for (const t of chunk) {
+        const preview = results[n]![t.id]
+        if (!preview) continue
+        tracks.push({
+          id: `sp:${t.id}`,
+          title: t.title,
+          artist: t.artist,
+          album: t.album,
+          artwork: t.artwork,
+          preview,
+          link: `https://open.spotify.com/track/${t.id}`,
+          year: t.year,
+          spotifyId: t.id,
+        })
+      }
+    })
+    onProgress?.(tracks.length)
   }
   if (tracks.length === 0) throw new MusicError('None of your top tracks have a preview clip on Spotify. Try a playlist link instead.')
-  return tracks.slice(0, MAX_BLEND_TRACKS)
+  return tracks.slice(0, want)
 }
 
 /** A public playlist or album link as Blend songs. */

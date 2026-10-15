@@ -19,6 +19,8 @@ const AUTHORIZE = 'https://accounts.spotify.com/authorize'
 const TOKEN = 'https://accounts.spotify.com/api/token'
 const API = 'https://api.spotify.com/v1'
 const SCOPES = 'user-top-read user-library-read'
+/** Songs saved per Spotify connection (the Blend picks from these). */
+const MAX_SAVED_TRACKS = 300
 const EMBED_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
   'Accept-Language': 'en-US,en;q=0.9',
@@ -69,7 +71,10 @@ async function apiGet<T>(path: string, accessToken: string): Promise<T> {
   return res.json() as Promise<T>
 }
 
-/** Top tracks (last ~6 months), topped up with liked songs for light listeners. */
+/**
+ * A big slice of the listener's taste for Blend games: top tracks over the last
+ * month, six months and all time, topped up with their liked songs.
+ */
 async function readListening(accessToken: string): Promise<SpotifyTopTrack[]> {
   const seen = new Set<string>()
   const out: SpotifyTopTrack[] = []
@@ -82,17 +87,25 @@ async function readListening(accessToken: string): Promise<SpotifyTopTrack[]> {
       }
     }
   }
+  // The first list must work (it tells us whether we have access at all); the rest are best effort.
   const top = await apiGet<{ items?: ApiTrack[] }>('/me/top/tracks?limit=50&time_range=medium_term', accessToken)
   add(top.items ?? [])
-  if (out.length < 30) {
-    const recent = await apiGet<{ items?: ApiTrack[] }>('/me/top/tracks?limit=50&time_range=short_term', accessToken).catch(() => ({ items: [] }))
-    add(recent.items ?? [])
+  const more = await Promise.all(
+    [
+      '/me/top/tracks?limit=50&offset=49&time_range=medium_term',
+      '/me/top/tracks?limit=50&time_range=short_term',
+      '/me/top/tracks?limit=50&time_range=long_term',
+      '/me/top/tracks?limit=50&offset=49&time_range=long_term',
+    ].map((path) => apiGet<{ items?: ApiTrack[] }>(path, accessToken).catch(() => ({ items: [] as ApiTrack[] }))),
+  )
+  for (const list of more) add(list.items ?? [])
+  for (const offset of [0, 50, 100]) {
+    if (out.length >= MAX_SAVED_TRACKS) break
+    const liked = await apiGet<{ items?: { track?: ApiTrack }[] }>(`/me/tracks?limit=50&offset=${offset}`, accessToken).catch(() => ({ items: [] }))
+    if (!liked.items?.length) break
+    add(liked.items.map((i) => i.track))
   }
-  if (out.length < 30) {
-    const liked = await apiGet<{ items?: { track?: ApiTrack }[] }>('/me/tracks?limit=50', accessToken).catch(() => ({ items: [] }))
-    add((liked.items ?? []).map((i) => i.track))
-  }
-  return out.slice(0, 80)
+  return out.slice(0, MAX_SAVED_TRACKS)
 }
 
 async function linkFor(request: Request, env: Env): Promise<{ hash: string; row: { name: string; image: string | null; tracks_json: string; created_at: number } } | null> {

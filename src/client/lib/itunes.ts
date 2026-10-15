@@ -6,6 +6,7 @@ import type { PlaylistInfo, PlaylistSource, Source, Track } from '../../shared/p
 import { api, ApiError } from './api'
 import { shuffle } from '../../shared/questions'
 import { artistMatches, compareKey } from '../../shared/text'
+import { matchSong, songSearchUrl, type SongClip, type SongRef } from '../../shared/songs'
 
 const API = 'https://itunes.apple.com'
 const TIMEOUT_MS = 12_000
@@ -289,4 +290,17 @@ export async function buildPool(source: Source, region: RegionCode): Promise<Tra
     throw new MusicError('Could not load songs from the music catalog. Wait a minute and try again.')
   }
   return tracks
+}
+
+/**
+ * An emoji puzzle's song, looked up from this browser (Apple rate-limits the
+ * server, but each player's own lookups are fine). Null when it isn't on iTunes.
+ */
+export async function findSongClip(song: SongRef): Promise<SongClip | null> {
+  try {
+    const { results = [] } = await getJson<{ results?: Parameters<typeof matchSong>[0] }>(songSearchUrl(song))
+    return matchSong(results, song)?.clip ?? null
+  } catch {
+    return null
+  }
 }

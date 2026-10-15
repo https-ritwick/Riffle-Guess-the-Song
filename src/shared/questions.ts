@@ -24,6 +24,14 @@ export function shuffle<T>(items: readonly T[], rand: Random): T[] {
   return a
 }
 
+/**
+ * Key for "has this room played it before?": the same song from any service or
+ * player, or a challenge item's id.
+ */
+export function playedKey(t: Pick<Track, 'id' | 'title' | 'artist'>, mode: QuestionMode = 'title'): string {
+  return mode === 'title' || mode === 'artist' ? `${compareKey(t.title)}|${compareKey(primaryArtist(t.artist))}` : t.id
+}
+
 /** Remove duplicate songs (same cleaned title by the same lead artist). */
 export function dedupeTracks(pool: readonly Track[]): Track[] {
   const seen = new Set<string>()
@@ -38,7 +46,7 @@ export function dedupeTracks(pool: readonly Track[]): Track[] {
   return out
 }
 
-function answerText(track: Track, mode: QuestionMode): string {
+function answerText(track: Track, mode: 'title' | 'artist'): string {
   return mode === 'title' ? cleanTitle(track.title) : primaryArtist(track.artist)
 }
 
@@ -131,7 +139,7 @@ function artistCandidates(correct: Track, pool: readonly Track[]): Candidate[] {
 }
 
 /** Three wrong answers: plausible look-alikes on medium/hard, random on easy. */
-function pickDistractors(correct: Track, pool: readonly Track[], mode: QuestionMode, difficulty: Difficulty, rand: Random): Candidate[] | null {
+function pickDistractors(correct: Track, pool: readonly Track[], mode: 'title' | 'artist', difficulty: Difficulty, rand: Random): Candidate[] | null {
   const cands = mode === 'title' ? titleCandidates(correct, pool) : artistCandidates(correct, pool)
   if (cands.length < 3) return null
   return rank(cands, difficulty, rand).slice(0, 3)
@@ -163,7 +171,7 @@ export function buildQuestions(
   const questions: Question[] = []
   for (const track of opts.order === 'given' ? pool : shuffle(pool, rand)) {
     if (questions.length >= opts.rounds) break
-    let mode: QuestionMode = 'title'
+    let mode: 'title' | 'artist' = 'title'
     if (opts.answerType === 'artist' && artistPossible) mode = 'artist'
     if (opts.answerType === 'mixed' && artistPossible && rand() < 0.5) mode = 'artist'
 
