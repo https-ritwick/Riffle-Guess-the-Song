@@ -2,7 +2,7 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
   X-Frame-Options: DENY
-  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Permissions-Policy: camera=(), microphone=(self), geolocation=()
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.mzstatic.com https://i.scdn.co https://mosaic.scdn.co https://*.spotifycdn.com https://*.googleusercontent.com; media-src 'self' data: https://audio-ssl.itunes.apple.com https://*.mzstatic.com https://p.scdn.co; connect-src 'self' wss: https://itunes.apple.com; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
 
 /assets/*

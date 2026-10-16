@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { CHAT_HISTORY, type ChatMessage } from '../../shared/chat'
 import type { ClientMessage, PublicState, RoomInfo, ServerMessage, Settings, Source } from '../../shared/protocol'
 import { load, remove, save } from './storage'
 
@@ -71,6 +72,10 @@ export function useRoom(code: string) {
   const [error, setError] = useState<RoomError | null>(null)
   const [reactions, setReactions] = useState<Reaction[]>([])
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null)
+  const [chat, setChat] = useState<ChatMessage[]>([])
+  /** Goes up every time the server seats us (first join and every reconnect). */
+  const [seat, setSeat] = useState(0)
+  const rtcHandler = useRef<((from: string, data: string) => void) | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const nameRef = useRef<string | null>(load(tokenKey(code)) ? load('name') : null)
@@ -131,6 +136,16 @@ export function useRoom(code: string) {
           save(tokenKey(code), msg.token)
           setYou(msg.you)
           setError(null)
+          setSeat((n) => n + 1)
+          break
+        case 'chatHistory':
+          setChat(msg.messages)
+          break
+        case 'chat':
+          setChat((c) => (c.some((m) => m.id === msg.message.id) ? c : [...c.slice(-(CHAT_HISTORY - 1)), msg.message]))
+          break
+        case 'rtc':
+          rtcHandler.current?.(msg.from, msg.data)
           break
         case 'error':
           setError({ code: msg.code, message: msg.message, at: Date.now() })
@@ -253,5 +268,10 @@ export function useRoom(code: string) {
   /** Current time on the server's clock (ms). */
   const serverNow = useCallback(() => Date.now() + offsetRef.current, [])
 
-  return { status, state, you, error, reactions, suggestion, send: sendRaw, join, leave, serverNow, wantsSeat: nameRef.current !== null }
+  /** Who handles WebRTC signalling from other players (the voice channel). */
+  const onRtc = useCallback((fn: ((from: string, data: string) => void) | null) => {
+    rtcHandler.current = fn
+  }, [])
+
+  return { status, state, you, error, reactions, suggestion, chat, seat, onRtc, send: sendRaw, join, leave, serverNow, wantsSeat: nameRef.current !== null }
 }

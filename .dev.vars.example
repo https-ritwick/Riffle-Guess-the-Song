@@ -15,3 +15,7 @@ SPOTIFY_CLIENT_SECRET=
 # (the games work without it). GEMINI_MODEL optionally picks a model to try first.
 GEMINI_API_KEY=
 GEMINI_MODEL=
+# Optional: TURN relay for the voice channel, for players on strict NATs / firewalls
+# (STUN alone works for most). Create a TURN key under Cloudflare dashboard → Realtime → TURN.
+TURN_KEY_ID=
+TURN_KEY_API_TOKEN=

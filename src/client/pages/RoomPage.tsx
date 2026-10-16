@@ -11,6 +11,8 @@ import { useAuth } from '../lib/auth'
 import { describeSource } from '../lib/source'
 import { load } from '../lib/storage'
 import { useRoom } from '../lib/useRoom'
+import { useVoice } from '../lib/voice'
+import { ChatDock } from '../room/Chat'
 import { RoomContext, type RoomContextValue } from '../room/context'
 import { GameView } from '../room/GameView'
 import { Lobby } from '../room/Lobby'
@@ -160,8 +162,13 @@ function SoundBlockedBanner() {
 
 function RoomView({ code }: { code: string }) {
   const room = useRoom(code)
-  const { status, state, you, error, send, join, leave, serverNow, reactions, wantsSeat, suggestion } = room
+  const { status, state, you, error, send, join, leave, serverNow, reactions, wantsSeat, suggestion, chat, seat, onRtc } = room
   const [joining, setJoining] = useState(false)
+  const { voice, snapshot: voiceState, onSignal } = useVoice(send, you, state?.players, seat)
+  useEffect(() => {
+    onRtc(onSignal)
+    return () => onRtc(null)
+  }, [onRtc, onSignal])
   const toast = useToast()
 
   // Host: friends can suggest music; one tap applies it.
@@ -281,6 +288,9 @@ function RoomView({ code }: { code: string }) {
           <GameView />
         )}
         <Reactions reactions={reactions} players={ctx.state.players} />
+        <ChatDock messages={chat} voice={voice} snapshot={voiceState} raised={phase === 'lobby'} />
+        {/* Room to scroll the page clear of the chat dock. */}
+        {!ctx.state.solo && <div aria-hidden="true" className="h-16" />}
         <SoundBlockedBanner />
       </RoomContext.Provider>
     )

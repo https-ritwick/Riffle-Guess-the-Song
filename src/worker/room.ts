@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers'
 import { pickAwardNames, type AwardName } from '../shared/awards'
+import { CHAT_COOLDOWN_MS, CHAT_HISTORY, sanitizeChat, type ChatMessage, type VoiceState } from '../shared/chat'
 import { findPreset } from '../shared/catalog'
 import { dailySettings, seededRandom } from '../shared/daily'
 import { buildChallengeQuestions, CHALLENGE_QUESTION, summarize, type ChallengeItem, type ChallengePrompt, type GameKind } from '../shared/challenges'
@@ -74,6 +75,8 @@ interface PlayerRecord {
   connected: boolean
   joinedAt: number
   leftAt: number | null
+  /** In the voice channel (cleared when they disconnect). */
+  voice?: VoiceState | null
 }
 
 interface AnswerRecord {
@@ -156,6 +159,7 @@ interface SessionIdentity {
 interface Attachment {
   pid: string | null
   lastReaction: number
+  lastChat?: number
   user: SessionIdentity | null
   member: boolean
 }
@@ -222,6 +226,8 @@ export class GameRoom extends DurableObject<Env> {
   private aiInflight = new Map<ChallengeGame, Promise<void>>()
   private starting = false
   private artCache = new Map<string, string | null>()
+  /** Recent chat messages (kept under their own key so answers don't rewrite them). */
+  private chat: ChatMessage[] = []
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -259,6 +265,7 @@ export class GameRoom extends DurableObject<Env> {
         await ctx.storage.delete('blend')
       }
       this.ai = (await ctx.storage.get<AiStore>('ai')) ?? { ready: {}, seen: {} }
+      this.chat = (await ctx.storage.get<ChatMessage[]>('chat')) ?? []
     })
     // Keep-alive pings are answered without waking the object from hibernation.
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'))
@@ -394,6 +401,7 @@ export class GameRoom extends DurableObject<Env> {
         await this.ctx.storage.deleteAll()
         this.room = null
         this.blend = {}
+        this.chat = []
         return
       }
       // Nobody is watching: don't keep cycling through rounds.
@@ -444,6 +452,41 @@ export class GameRoom extends DurableObject<Env> {
         if (msg.source.kind === 'preset' && !findPreset(msg.source.id)) return false
         ws.serializeAttachment({ ...att, lastReaction: now } satisfies Attachment)
         for (const s of this.socketsOf(room.hostId ?? '')) this.send(s, { t: 'suggestion', from: player.id, source: msg.source })
+        return false
+      }
+
+      case 'chat': {
+        if (room.solo || now - (att.lastChat ?? 0) < CHAT_COOLDOWN_MS) return false
+        const text = msg.text !== undefined ? sanitizeChat(msg.text) : ''
+        if (!text && !msg.sticker) return false
+        ws.serializeAttachment({ ...att, lastChat: now } satisfies Attachment)
+        const message: ChatMessage = {
+          id: newId(),
+          from: player.id,
+          name: player.name,
+          avatar: player.avatar,
+          photo: player.photo,
+          at: now,
+          ...(msg.sticker ? { sticker: msg.sticker } : { text }),
+        }
+        this.chat = [...this.chat.slice(-(CHAT_HISTORY - 1)), message]
+        this.broadcastRaw({ t: 'chat', message })
+        await this.ctx.storage.put('chat', this.chat)
+        return false
+      }
+
+      case 'voice': {
+        if (room.solo || (player.voice ?? null) === msg.state) return false
+        player.voice = msg.state
+        return true
+      }
+
+      case 'rtc': {
+        // Only relay between two players who are both in the voice channel.
+        if (!player.voice) return false
+        const target = room.players.find((p) => p.id === msg.to)
+        if (!target?.voice || target.id === player.id) return false
+        for (const s of this.socketsOf(target.id)) this.send(s, { t: 'rtc', from: player.id, data: msg.data })
         return false
       }
 
@@ -648,6 +691,7 @@ export class GameRoom extends DurableObject<Env> {
 
     ws.serializeAttachment({ ...att, pid: player.id } satisfies Attachment)
     this.send(ws, { t: 'welcome', you: player.id, token: player.token })
+    if (!room.solo) this.send(ws, { t: 'chatHistory', messages: this.chat })
     return true
   }
 
@@ -888,6 +932,7 @@ export class GameRoom extends DurableObject<Env> {
     const now = Date.now()
     player.connected = false
     player.leftAt = now
+    player.voice = null
     if (room.hostId === pid && room.players.some((p) => p.connected)) {
       room.hostTransferAt = now + HOST_GRACE_MS
     }
@@ -1276,6 +1321,7 @@ export class GameRoom extends DurableObject<Env> {
           answerMs: a ? a.ms : null,
           roundPoints: a && (live || room.phase === 'reveal') ? a.points : null,
           first: !!a?.first && (live || room.phase === 'reveal'),
+          voice: p.connected ? (p.voice ?? null) : null,
         }
       }),
       round:
@@ -1360,7 +1406,7 @@ export class GameRoom extends DurableObject<Env> {
 
   private attachment(ws: WebSocket): Attachment {
     const a = ws.deserializeAttachment() as Partial<Attachment> | null
-    return { pid: a?.pid ?? null, lastReaction: a?.lastReaction ?? 0, user: a?.user ?? null, member: a?.member ?? false }
+    return { pid: a?.pid ?? null, lastReaction: a?.lastReaction ?? 0, lastChat: a?.lastChat ?? 0, user: a?.user ?? null, member: a?.member ?? false }
   }
 
   private connectedSockets(): WebSocket[] {

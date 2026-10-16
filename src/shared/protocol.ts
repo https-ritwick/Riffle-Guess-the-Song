@@ -5,6 +5,7 @@ import { GUESS_SECONDS_OPTIONS, REGION_CODES, ROUND_OPTIONS } from './catalog'
 import type { AwardName } from './awards'
 import type { ChallengePrompt } from './challenges'
 import { REACTIONS } from './rules'
+import { MAX_CHAT_LENGTH, MAX_SIGNAL_LENGTH, STICKER_IDS, type ChatMessage, type VoiceState } from './chat'
 
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
 export const ROOM_CODE_RE = /^[A-HJ-NP-Z]{4}$/
@@ -171,6 +172,12 @@ export const ClientMessageSchema = z.discriminatedUnion('t', [
   }),
   /** Remove one of your Blend sources, or all of them. */
   z.object({ t: z.literal('unblend'), index: z.number().int().min(0).max(MAX_BLEND_SOURCES).optional() }),
+  /** A chat message: some text (emoji welcome) or one sticker. */
+  z.object({ t: z.literal('chat'), text: z.string().max(MAX_CHAT_LENGTH * 2).optional(), sticker: z.enum(STICKER_IDS).optional() }),
+  /** Join the voice channel (muted or talking), or leave it (null). */
+  z.object({ t: z.literal('voice'), state: z.enum(['muted', 'live']).nullable() }),
+  /** WebRTC signalling (offer / answer / ICE candidate as JSON) for another player in the voice channel. */
+  z.object({ t: z.literal('rtc'), to: z.string().min(1).max(40), data: z.string().min(1).max(MAX_SIGNAL_LENGTH) }),
 ])
 export type ClientMessage = z.infer<typeof ClientMessageSchema>
 
@@ -200,6 +207,8 @@ export interface PublicPlayer {
   roundPoints: number | null
   /** First correct answer of the current round. */
   first: boolean
+  /** In the voice channel (muted or talking), or not (null). */
+  voice: VoiceState | null
 }
 
 export interface Pick {
@@ -322,6 +331,9 @@ export type ServerMessage =
   | { t: 'kicked' }
   | { t: 'reaction'; from: string; emoji: string }
   | { t: 'suggestion'; from: string; source: Source }
+  | { t: 'chat'; message: ChatMessage }
+  | { t: 'chatHistory'; messages: ChatMessage[] }
+  | { t: 'rtc'; from: string; data: string }
 
 export interface RoomInfo {
   code: string

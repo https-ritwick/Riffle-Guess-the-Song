@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import { Check, Link2, Loader2, Search, Send, Shuffle } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
-import { PRESET_GROUPS, PRESETS, type Preset, type PresetGroup } from '../../shared/catalog'
+import { PLAYLIST_CATEGORIES, PRESET_GROUPS, PRESETS, type PlaylistCategory, type Preset, type PresetGroup } from '../../shared/catalog'
 import type { PlaylistInfo, Source } from '../../shared/protocol'
 import { parsePlaylistUrl } from '../../shared/playlist'
 import { Button, Cover, Input } from '../components/ui'
@@ -125,6 +125,9 @@ function PlaylistTab({ current, readOnly, onPick }: { current: Source; readOnly:
   const [info, setInfo] = useState<PlaylistInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [category, setCategory] = useState<PlaylistCategory>(
+    () => (current.kind === 'playlist' && FEATURED_WITH_COVERS.find((p) => p.provider === current.provider && p.id === current.id)?.category) || 'desi',
+  )
 
   const lookup = async (e: FormEvent) => {
     e.preventDefault()
@@ -205,9 +208,28 @@ function PlaylistTab({ current, readOnly, onPick }: { current: Source; readOnly:
       )}
 
       <div>
-        <p className="mb-3 text-sm font-semibold text-gray-300">Popular playlists</p>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <p className="mr-1 text-sm font-semibold text-gray-300">Popular playlists</p>
+          <div className="-mx-1 flex w-full gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:w-auto sm:flex-wrap sm:overflow-visible" role="tablist" aria-label="Playlist categories">
+            {PLAYLIST_CATEGORIES.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                role="tab"
+                aria-selected={category === c.id}
+                onClick={() => setCategory(c.id)}
+                className={clsx(
+                  'shrink-0 rounded-full px-3 py-1 text-xs font-semibold ring-1 transition-colors',
+                  category === c.id ? 'bg-brand-400 text-black ring-brand-300' : 'bg-gray-900 text-gray-300 ring-gray-700 hover:text-white',
+                )}
+              >
+                {c.label} <span className="opacity-60">{FEATURED_WITH_COVERS.filter((p) => p.category === c.id).length}</span>
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-          {FEATURED_WITH_COVERS.map((p) => {
+          {FEATURED_WITH_COVERS.filter((p) => p.category === category).map((p) => {
             const source: Source = {
               kind: 'playlist',
               provider: p.provider,

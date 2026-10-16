@@ -3,7 +3,7 @@ import type { Pick, PublicPlayer, RoundSummary, Track } from '../../src/shared/p
 import { biggestComeback, computeAwards, emojiGrid, roundStats } from '../../src/client/room/results/stats'
 
 function player(id: string, score: number, extra: Partial<PublicPlayer> = {}): PublicPlayer {
-  return { id, name: id.toUpperCase(), avatar: 0, photo: null, signedIn: false, score, streak: 0, bestStreak: 0, correct: 0, connected: true, answered: false, answerMs: null, roundPoints: null, first: false, ...extra }
+  return { id, name: id.toUpperCase(), avatar: 0, photo: null, signedIn: false, score, streak: 0, bestStreak: 0, correct: 0, connected: true, answered: false, answerMs: null, roundPoints: null, first: false, voice: null, ...extra }
 }
 
 const track = (i: number): Track => ({ id: String(i), title: `Song ${i}`, artist: 'A', album: '', artwork: '', preview: `https://audio-ssl.itunes.apple.com/${i}.m4a`, link: '', year: null })

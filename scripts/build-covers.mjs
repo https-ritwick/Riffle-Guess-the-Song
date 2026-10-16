@@ -1,7 +1,8 @@
 // Generates src/shared/covers.json: real album artwork for every preset tile and
 // featured playlist. Run with `npm run covers` (paced to respect iTunes rate limits).
+// Only tiles without artwork are fetched; pass --all to rebuild every one.
 // Requires Node 22.6+ (imports the TypeScript catalog directly).
-import { writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { FEATURED_PLAYLISTS, PRESETS } from '../src/shared/catalog.ts'
 
 const UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36' }
@@ -18,9 +19,16 @@ async function getJson(url) {
   return null
 }
 
+const file = new URL('../src/shared/covers.json', import.meta.url)
+const previous = !process.argv.includes('--all') && existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : { presets: {}, playlists: {} }
 const out = { presets: {}, playlists: {} }
+const save = () => writeFileSync(file, JSON.stringify(out, null, 2) + '\n')
 
 for (const p of PRESETS) {
+  if (previous.presets[p.id]?.length) {
+    out.presets[p.id] = previous.presets[p.id]
+    continue
+  }
   const country = p.country ?? 'in'
   const covers = []
   if (p.kind === 'chart') {
@@ -45,9 +53,16 @@ for (const p of PRESETS) {
   }
   out.presets[p.id] = covers
   console.log(p.id, covers.length)
+  // Keep progress if the run is interrupted (the final write drops removed tiles).
+  writeFileSync(file, JSON.stringify({ presets: { ...previous.presets, ...out.presets }, playlists: previous.playlists }, null, 2) + '\n')
 }
 
 for (const f of FEATURED_PLAYLISTS) {
+  const key = `${f.provider}:${f.id}`
+  if (previous.playlists[key]) {
+    out.playlists[key] = previous.playlists[key]
+    continue
+  }
   let cover = null
   if (f.provider === 'spotify') {
     const html = await (await fetch(`https://open.spotify.com/embed/${f.type}/${f.id}`, { headers: UA })).text()
@@ -59,10 +74,10 @@ for (const f of FEATURED_PLAYLISTS) {
     const m = html.match(/<meta property="og:image" content="([^"]+)"/)
     cover = m ? m[1] : null
   }
-  out.playlists[`${f.provider}:${f.id}`] = cover
+  out.playlists[key] = cover
   console.log(f.name, cover ? 'ok' : 'missing')
   await sleep(500)
 }
 
-writeFileSync(new URL('../src/shared/covers.json', import.meta.url), JSON.stringify(out, null, 2) + '\n')
+save()
 console.log('wrote src/shared/covers.json')

@@ -55,12 +55,14 @@ The original gameplay screen was modelled on the public parts of [Tapzz](https:/
 - A **Wordle-style share grid** (🟩🟥⬛).
 
 **Music from any source**
-- **Playlists**: paste any *public* Spotify or Apple Music playlist or album link (item songs, 90s Bollywood, your road-trip mix…). You can also pick a featured playlist, such as Bollywood Item Songs, Hot Hits Hindi, Bollywood Central, Punjabi 101 or All Out 90s.
-- **Top Charts**: live iTunes charts. These cover Top Songs for your region plus Bollywood, Pop, Hip-Hop, Rock, Dance, Country, Latin, Tamil and Telugu.
+- **Playlists**: paste any *public* Spotify or Apple Music playlist or album link (item songs, 90s Bollywood, your road-trip mix…). You can also pick from 84 featured playlists, all checked to load with previews and grouped as Desi, Top Hits, Throwback, Genres, Moods & Party and World. Examples: Hot Hits Hindi, Top 50 India, Bollywood Mush, This Is Arijit Singh, Old is Gold, Hot Hits Tamil/Telugu, All Out 70s–2010s, RapCaviar, Viva Latino and K-Pop ON!
+- **Top Charts**: live iTunes charts. These cover Top Songs for your region plus Bollywood, Pop, Hip-Hop, Rock, Dance, Country, Latin, Tamil, Telugu, Indian Pop, Sufi, Devotional, Alternative, R&B, Electronic, J-Pop, Reggae and Jazz, and the US, UK and Brazil charts.
 - **Mixes**:
-  - *Desi*: Bollywood Hits, 90s and 2000s Bollywood, Retro, Punjabi, Desi Hip-Hop, Indian Indie and South.
-  - *Decades*: the 70s through the 2020s.
-  - *Genres*: Pop, Rap, Rock, Metal, K-Pop, EDM, R&B, Latin, Country, Movies and Christmas.
+  - *Desi*: Bollywood Hits, 80s, 90s, 2000s and 2010s Bollywood, Retro, Romance, Bollywood Party, Shaadi Songs, Garba & Dandiya, Punjabi, Desi Hip-Hop, Indian Indie, Sufi & Qawwali, Ghazals, Coke Studio & Pakistani Pop, South, Tamil Evergreen, Malayalam, Kannada, Marathi and Bengali.
+  - *Decades*: the 60s through the 2020s.
+  - *Genres*: Pop, Rap, Rock, Metal, K-Pop, EDM, R&B, Latin, Country, Movies, Christmas, Indie, Pop-Punk, Boy Bands & Girl Groups, Soul & Motown, Jazz, Reggae, Acoustic and Broadway.
+  - *Moods*: Party Starters, Love Songs, Heartbreak, Workout, Road Trip, Chill, Karaoke Classics, Viral Hits and Feel-Good.
+  - *World*: Afrobeats, J-Pop & Anime, Arabic, Pop en Español, French, Brazilian, Turkish and K-Pop Classics.
 - **Artist** search (with photos) and **free-text search**. Every tile shows real album artwork.
 
 **Playing**
@@ -82,6 +84,8 @@ The original gameplay screen was modelled on the public parts of [Tapzz](https:/
   - instant right/wrong feedback with sound effects and vibration;
   - an album-cover flip that reveals the real artwork and everyone's picks;
   - **40 emoji reactions** (🔥 😂 💀 🖕 🤡 🐐 …) that float up everyone's screen with the sender's name, from the lobby, after you answer, at the reveal and on the results.
+- **Room chat:** a chat dock in every multiplayer room with text, an emoji picker (7 sets), and 24 party stickers (BANGER, GG, RIGGED, BHAI KYA SCENE…). Emoji-only messages show large, unread messages get a badge and a short preview, and the last 60 messages stay in the room for anyone who joins late or refreshes.
+- **Voice channel:** tap 🎧 to join and listen, or 🎙 to talk. You start muted, and the mic is only opened while you're unmuted (muting closes it again). Voice is peer-to-peer WebRTC, signalled over the room's WebSocket, with a green ring on whoever is speaking. STUN works on most networks. Add a Cloudflare TURN key (see [Environment variables](#environment-variables)) for players behind strict firewalls.
 - **Live ranked leaderboard:** re-ranks the moment someone answers. Rows slide to their new place, and it shows rank arrows, answer times, streak flames and points earned.
 - **Results:**
   - confetti and a podium;
@@ -215,6 +219,7 @@ npm run covers       # regenerate real tile artwork (paced, ~7 min)
 | `SPOTIFY_CLIENT_SECRET` | Worker secret | Spotify app client secret |
 | `GEMINI_API_KEY` | Worker secret | Optional. Google Gemini writes fresh challenge questions and award names. Without it the built-in bank and award pools are used. |
 | `GEMINI_MODEL` | Worker variable | Optional. A Gemini model to try first (otherwise a built-in list of current Flash models is tried in order). |
+| `TURN_KEY_ID` / `TURN_KEY_API_TOKEN` | Worker secrets | Optional. A Cloudflare TURN key (dashboard → Realtime → TURN) so voice chat also works for players on strict NATs/firewalls. Without it, `GET /api/rtc/ice` hands out STUN servers only. |
 | `DEV_LOGIN` | `.dev.vars` only | `true` enables developer sign-in on localhost. Never set in production. |
 
 Bindings (in `wrangler.jsonc`): `ROOMS` (Durable Object), `DB` (D1 `riffle-db`), `CREATE_LIMITER` / `CONNECT_LIMITER` (rate limits), `ASSETS`.
@@ -307,6 +312,7 @@ Then open `/api/ai/health` on your site: it reports whether the key works and wh
 - **Short links:** Spotify short links (`spotify.link/…`) aren't supported. Use "Copy link to playlist" instead.
 - **Page-format dependency:** playlist import depends on the public Spotify embed page and Apple Music pages. If either changes its page format, playlist import needs an update. Charts, mixes, artist search and free-text search keep working.
 - **Spotify connect:** limited to the app's allow-listed users while it is in Spotify's development mode (see above). The Web API no longer returns preview clips, so previews are read from each track's public embed page (20 per request).
+- **Voice channel size:** every player in voice connects to every other one (a mesh), which is fine for a party of up to 16 but uses more upload on slow phones as more people talk. Without a TURN key, a few players on strict networks may not hear each other.
 - **Email invitations:** these aren't actually emailed. The invitee sees them after signing in with that Gmail, so share the invite link to notify people directly.
 
 ## Reference & fidelity

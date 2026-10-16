@@ -94,6 +94,32 @@ async function dailyBoard(env: Env, url: URL): Promise<DailyBoard> {
   return board
 }
 
+/**
+ * ICE servers for the voice channel. STUN is enough for most networks; with a
+ * Cloudflare TURN key (TURN_KEY_ID + TURN_KEY_API_TOKEN) players behind strict
+ * NATs or firewalls are relayed too.
+ */
+async function iceServers(env: Env): Promise<{ iceServers: unknown[] }> {
+  const stun = { urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] }
+  const turn = env as unknown as { TURN_KEY_ID?: string; TURN_KEY_API_TOKEN?: string }
+  if (!turn.TURN_KEY_ID?.trim() || !turn.TURN_KEY_API_TOKEN?.trim()) return { iceServers: [stun] }
+  try {
+    const res = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${turn.TURN_KEY_ID.trim()}/credentials/generate-ice-servers`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${turn.TURN_KEY_API_TOKEN.trim()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ttl: 6 * 60 * 60 }),
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) throw new Error(`TURN credentials: HTTP ${res.status}`)
+    const body = (await res.json()) as { iceServers?: unknown }
+    const servers = Array.isArray(body.iceServers) ? body.iceServers : body.iceServers ? [body.iceServers] : []
+    return { iceServers: servers.length ? servers : [stun] }
+  } catch (err) {
+    console.error('TURN credentials failed', err)
+    return { iceServers: [stun] }
+  }
+}
+
 async function handlePlaylist(request: Request, env: Env, url: URL, ctx: ExecutionContext): Promise<Response | null> {
   if (url.pathname !== '/api/playlist') return null
   if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405)
@@ -118,6 +144,11 @@ export default {
     if (!pathname.startsWith('/api/')) return env.ASSETS.fetch(request)
     if (pathname === '/api/health') return json({ ok: true })
     if (pathname === '/api/daily' && request.method === 'GET') return json(await dailyBoard(env, url))
+    if (pathname === '/api/rtc/ice' && request.method === 'GET') {
+      const { success } = await env.CONNECT_LIMITER.limit({ key: `ice:${clientKey(request)}` })
+      if (!success) return json({ error: 'Too many requests. Try again in a minute.' }, 429)
+      return json(await iceServers(env))
+    }
     // Is the optional AI (Gemini) set up and answering? Makes one tiny request, so it's rate-limited.
     if (pathname === '/api/ai/health') {
       const { success } = await env.CONNECT_LIMITER.limit({ key: `ai:${clientKey(request)}` })
