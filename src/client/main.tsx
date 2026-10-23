@@ -4,6 +4,7 @@ import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Route, Routes } from 'react-router'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { ProfileGate } from './components/ProfilePrompt'
 import { ToastProvider } from './components/Toasts'
 import { Spinner } from './components/ui'
 import { AuthProvider } from './lib/auth'
@@ -45,6 +46,7 @@ createRoot(document.getElementById('root')!).render(
                   <Route path="*" element={<Home />} />
                 </Routes>
               </Suspense>
+              <ProfileGate />
             </SiteProvider>
           </AuthProvider>
         </ToastProvider>

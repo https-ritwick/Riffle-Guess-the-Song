@@ -9,6 +9,32 @@ export interface Me {
   picture: string | null
   /** Allowed into the admin console. */
   admin?: boolean
+  /** Age (from the approximate birth year) and gender, asked once after the first sign-in. */
+  age: number | null
+  gender: Gender | null
+}
+
+export const GENDERS = ['female', 'male', 'nonbinary', 'other', 'undisclosed'] as const
+export type Gender = (typeof GENDERS)[number]
+export const GENDER_LABELS: Record<Gender, string> = {
+  female: 'Female',
+  male: 'Male',
+  nonbinary: 'Non-binary',
+  other: 'Other',
+  undisclosed: 'Prefer not to say',
+}
+
+/** Riffle is for players aged 13 and up (see the Terms). */
+export const MIN_AGE = 13
+
+export const ProfileSchema = z.object({
+  age: z.number().int('Enter your age in whole years').min(1, 'Enter your age').max(110, 'Enter a real age'),
+  gender: z.enum(GENDERS, 'Pick one of the options'),
+})
+
+/** Approximate age from a birth year stored at sign-up. */
+export function ageFromBirthYear(birthYear: number | null | undefined, now = new Date()): number | null {
+  return birthYear ? now.getUTCFullYear() - birthYear : null
 }
 
 export interface AuthConfig {

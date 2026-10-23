@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { ChevronDown, Loader2, LogIn, LogOut, ShieldCheck, Unlink, Users } from 'lucide-react'
+import { ChevronDown, Loader2, LogIn, LogOut, ShieldCheck, Unlink, UserRound, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { BRAND } from '../../shared/brand'
@@ -9,6 +9,7 @@ import { connectSpotify, disconnectSpotify, useSpotify } from '../lib/spotify'
 import { SpotifyIcon } from './SpotifyIcon'
 import { useToast } from './Toasts'
 import { DevLoginDialog } from './DevLogin'
+import { ProfileDialog } from './ProfilePrompt'
 import { UserPhoto } from './ui'
 
 export function GoogleIcon({ className }: { className?: string }) {
@@ -113,6 +114,7 @@ export function UserMenu() {
   const { me, loading, signOut, signIn, config } = useAuth()
   const [open, setOpen] = useState(false)
   const [devOpen, setDevOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
 
@@ -166,6 +168,17 @@ export function UserMenu() {
           <Link role="menuitem" to="/groups" onClick={() => setOpen(false)} className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-200 hover:bg-gray-800">
             <Users className="h-4 w-4" /> My groups
           </Link>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              setProfileOpen(true)
+            }}
+            className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-gray-200 hover:bg-gray-800"
+          >
+            <UserRound className="h-4 w-4" /> Age & gender
+          </button>
           {me.admin && (
             <Link role="menuitem" to="/admin" onClick={() => setOpen(false)} className="flex items-center gap-2 px-4 py-2.5 text-sm text-brand-200 hover:bg-gray-800" data-testid="admin-link">
               <ShieldCheck className="h-4 w-4" /> Admin console
@@ -185,6 +198,7 @@ export function UserMenu() {
           </button>
         </div>
       )}
+      {profileOpen && <ProfileDialog onClose={() => setProfileOpen(false)} />}
     </div>
   )
 }

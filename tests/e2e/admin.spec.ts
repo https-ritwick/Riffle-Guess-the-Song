@@ -29,7 +29,7 @@ test('admin sees the dashboard, analytics and can moderate', async ({ page, brow
   await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible()
   await expect(page.getByText('Games played')).toBeVisible()
 
-  for (const tab of ['Audience', 'Geography', 'Games & preferences', 'Songs & questions', 'Retention']) {
+  for (const tab of ['Audience', 'Geography', 'Age & gender', 'Games & preferences', 'Songs & questions', 'Retention']) {
     await page.goto('/admin/analytics')
     await page.getByRole('tab', { name: tab }).click()
     await expect(page.getByRole('alert')).toHaveCount(0)
@@ -69,4 +69,30 @@ test('terms and privacy pages, with an analytics opt-out', async ({ page }) => {
 
   await page.getByTestId('footer').getByRole('link', { name: 'Terms' }).click()
   await expect(page.getByRole('heading', { name: 'Terms of Service' })).toBeVisible()
+})
+
+test('new accounts are asked their age and gender once', async ({ page }) => {
+  const email = `newbie${Date.now()}@example.com`
+  expect((await page.request.post('/api/auth/dev-login', { data: { name: 'Newbie Player', email } })).ok()).toBe(true)
+  await page.goto('/')
+  const dialog = page.getByTestId('profile-dialog')
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('heading')).toHaveText('Welcome to Riffle, Newbie!')
+
+  // Too young: nothing is saved.
+  await dialog.getByLabel('Age').fill('11')
+  await dialog.getByText('Female', { exact: true }).click()
+  await dialog.getByRole('button', { name: 'Continue' }).click()
+  await expect(dialog.getByRole('alert')).toContainText('13 and up')
+
+  await dialog.getByLabel('Age').fill('22')
+  await dialog.getByRole('button', { name: 'Continue' }).click()
+  await expect(dialog).toBeHidden()
+  const me = await (await page.request.get('/api/me')).json()
+  expect(me.user).toMatchObject({ age: 22, gender: 'female' })
+
+  // Asked only once.
+  await page.reload()
+  await expect(page.getByText('Name the song before your friends do.')).toBeVisible()
+  await expect(dialog).toHaveCount(0)
 })

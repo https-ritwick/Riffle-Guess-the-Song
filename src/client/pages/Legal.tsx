@@ -6,7 +6,7 @@ import { Shell } from '../components/Shell'
 import { Toggle } from '../components/ui'
 import { analyticsEnabled, browserBlocksAnalytics, setAnalyticsEnabled } from '../lib/track'
 
-const UPDATED = '23 October 2026'
+const UPDATED = '24 October 2026'
 const MAIL = <a href={`mailto:${BRAND.email}`} className="text-brand-300 underline-offset-2 hover:underline">{BRAND.email}</a>
 
 function Doc({ title, intro, toc, children }: { title: string; intro: ReactNode; toc: { id: string; label: string }[]; children: ReactNode }) {
@@ -141,7 +141,7 @@ export function PrivacyPage() {
     >
       <Section id="summary" title="The short version">
         <List>
-          <li>You can play without an account. If you sign in with Google, we get your name, email and profile photo.</li>
+          <li>You can play without an account. If you sign in with Google, we get your name, email and profile photo, and we ask your age and gender once.</li>
           <li>We run our own cookie-free analytics to see how {BRAND.name} is used — which pages, game modes and songs are popular, and roughly where players are (country, region, city).</li>
           <li>We never store your IP address, never sell your data and never show ads.</li>
           <li>You can switch analytics off below, and we honour your browser’s Global Privacy Control / Do Not Track signal automatically.</li>
@@ -173,6 +173,10 @@ export function PrivacyPage() {
         <h3 className="pt-2 font-semibold text-white">If you sign in with Google</h3>
         <List>
           <li>Your Google account ID, name, email address and profile photo.</li>
+          <li>
+            <strong className="text-gray-100">Your age and gender</strong>, which we ask once after your first sign-in. We store your age as an approximate birth year so it stays up to date. You can
+            choose “Prefer not to say” for gender, and change both any time from the account menu (<em>Age & gender</em>). They’re never shown to other players.
+          </li>
           <li>When you created your account, when you last signed in and how many times, and the approximate location of your most recent visit.</li>
           <li>Your groups, the group invites you send (including the email addresses you invite), and your game history and stats.</li>
         </List>
@@ -208,13 +212,15 @@ export function PrivacyPage() {
           <li>Per song or question: how often it’s played and how often it’s guessed right (not who guessed).</li>
         </List>
         <p>
-          If you’re signed in, analytics is linked to your account so we can understand how players use {BRAND.name} over time (for example, favourite game modes) and spot abuse.
+          If you’re signed in, analytics is linked to your account so we can understand how players use {BRAND.name} over time (for example, favourite game modes) and spot abuse. We also look at play
+          patterns by age group and gender — for example, which modes 18–24 year olds prefer — in aggregate only.
         </p>
       </Section>
 
       <Section id="use" title="How we use it">
         <List>
           <li>To run the game: rooms, scoring, results, groups, leaderboards and sign-in.</li>
+          <li>To check players meet the minimum age, and to understand which age groups and genders enjoy which parts of {BRAND.name}.</li>
           <li>To understand what people enjoy and improve {BRAND.name} — which songs are too hard, which modes are popular, where players are and what devices they use.</li>
           <li>To keep {BRAND.name} safe: rate-limiting, preventing cheating and spam, and moderating names, chat and groups.</li>
           <li>To answer you when you contact us.</li>
@@ -291,7 +297,8 @@ export function PrivacyPage() {
 
       <Section id="children" title="Children">
         <p>
-          {BRAND.name} isn’t meant for children under 13, and we don’t knowingly collect their information. If you’re under 18, please use {BRAND.name} — especially Google sign-in — only with a
+          {BRAND.name} isn’t meant for children under 13, and we don’t knowingly collect their information. We ask your age when you first sign in, and accounts can’t be set up for anyone
+          under 13. If you’re under 18, please use {BRAND.name} — especially Google sign-in — only with a
           parent or guardian’s permission. If you think a child has given us personal information, email {MAIL} and we’ll delete it.
         </p>
       </Section>
@@ -349,7 +356,10 @@ export function TermsPage() {
       </Section>
 
       <Section id="eligibility" title="Who can play">
-        <p>You must be at least 13 years old. If you’re under 18, you need a parent or guardian’s permission, and they agree to these Terms on your behalf.</p>
+        <p>
+          You must be at least 13 years old. If you’re under 18, you need a parent or guardian’s permission, and they agree to these Terms on your behalf. When you first sign in we ask your age
+          and gender; please answer honestly.
+        </p>
       </Section>
 
       <Section id="accounts" title="Accounts">

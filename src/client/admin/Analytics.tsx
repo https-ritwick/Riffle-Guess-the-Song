@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { Link, useNavigate, useParams } from 'react-router'
-import type { AudienceReport, ContentReport, GamesReport, GeoReport, ItemRow, Ranked, RetentionReport } from '../../shared/admin'
+import type { AudienceReport, ContentReport, DemographicsReport, GamesReport, GeoReport, ItemRow, Ranked, RetentionReport } from '../../shared/admin'
 import { UserPhoto } from '../components/ui'
 import { BarList, ChartCard, CohortGrid, compact, countryName, DataTable, dayLabel, flag, Heatmap, pct, SERIES, ShareBar, StackedColumns, StatTile, TimeSeries } from './charts'
 import { ErrorNote, ExportLink, PageHeader, RangePicker, Skeleton, useAdminData, useRange } from './lib'
@@ -9,6 +9,7 @@ import { useState } from 'react'
 const TABS = [
   { id: 'audience', label: 'Audience' },
   { id: 'geo', label: 'Geography' },
+  { id: 'demographics', label: 'Age & gender' },
   { id: 'games', label: 'Games & preferences' },
   { id: 'content', label: 'Songs & questions' },
   { id: 'retention', label: 'Retention' },
@@ -39,7 +40,7 @@ export function AnalyticsPage() {
         {tab !== 'content' && <RangePicker />}
         <ExportLink what={tab === 'content' ? 'songs' : tab === 'games' ? 'games' : 'visits'} days={days} />
       </PageHeader>
-      <div className="mb-5 flex gap-1 overflow-x-auto border-b border-white/[0.06]" role="tablist">
+      <div className="mb-5 flex gap-1 overflow-x-auto border-b border-white/[0.06] [scrollbar-width:none]" role="tablist">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -55,6 +56,7 @@ export function AnalyticsPage() {
       </div>
       {tab === 'audience' && <Audience days={days} />}
       {tab === 'geo' && <Geography days={days} />}
+      {tab === 'demographics' && <Demographics days={days} />}
       {tab === 'games' && <Games days={days} />}
       {tab === 'content' && <Content />}
       {tab === 'retention' && <Retention days={days} />}
@@ -191,6 +193,74 @@ function Geography({ days }: { days: number }) {
                 {flag(c.code)} {countryName(c.code)}
               </p>
               <ShareBar items={c.modes} />
+            </div>
+          ))}
+        </div>
+      </ChartCard>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+
+function GroupedShares({ groups, empty }: { groups: { label: string; items: Ranked[] }[]; empty: string }) {
+  if (!groups.length) return <p className="py-6 text-center text-sm text-gray-500">{empty}</p>
+  return (
+    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      {groups.map((g) => (
+        <div key={g.label}>
+          <p className="mb-2 text-sm font-semibold text-white">{g.label}</p>
+          <ShareBar items={g.items} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function Demographics({ days }: { days: number }) {
+  const { data, error, reload } = useAdminData<DemographicsReport>(`/api/admin/analytics/demographics?days=${days}`)
+  if (error) return <ErrorNote error={error} onRetry={reload} />
+  if (!data) return <Loading />
+  const topGender = [...data.genders].sort((a, b) => b.value - a.value)[0]
+  const genderTotal = data.genders.reduce((n, g) => n + g.value, 0)
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-gray-400">From the age and gender signed-in players give on first sign-in. Account totals are all-time; play preferences use games in this range.</p>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatTile label="Profiles filled in" value={data.withProfile} hint={data.accounts ? `${pct(data.withProfile / data.accounts)} of ${compact(data.accounts)} accounts` : '—'} />
+        <StatTile label="Average age" value={data.avgAge ?? 0} format={(n) => (data.avgAge == null ? '—' : n.toFixed(1))} hint="signed-in players" />
+        <StatTile label="Largest age group" value={Math.max(0, ...data.ages.map((a) => a.value))} hint={[...data.ages].sort((a, b) => b.value - a.value)[0]?.label ?? '—'} />
+        <StatTile label="Largest gender group" value={topGender && genderTotal ? topGender.value / genderTotal : 0} format={(n) => pct(n)} hint={topGender?.label ?? '—'} />
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartCard title="Age groups" subtitle="Accounts">
+          <BarList items={toBars(data.ages)} max={8} empty="No ages yet — players are asked at their next sign-in." />
+        </ChartCard>
+        <ChartCard title="Gender" subtitle="Accounts">
+          <ShareBar items={data.genders} />
+        </ChartCard>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartCard title="Who plays most, by age" subtitle="Player seats · accuracy on the right">
+          <BarList items={toBars(data.playByAge, (r) => (r.extra != null ? `${Math.round(r.extra)}%` : undefined))} max={8} empty="No signed-in games in this range." />
+        </ChartCard>
+        <ChartCard title="Who plays most, by gender" subtitle="Player seats · accuracy on the right">
+          <BarList items={toBars(data.playByGender, (r) => (r.extra != null ? `${Math.round(r.extra)}%` : undefined))} max={8} empty="No signed-in games in this range." />
+        </ChartCard>
+      </div>
+      <ChartCard title="Game types by age group" subtitle="Share of player seats">
+        <GroupedShares groups={data.kindsByAge} empty="No signed-in games in this range." />
+      </ChartCard>
+      <ChartCard title="Game types by gender" subtitle="Share of player seats">
+        <GroupedShares groups={data.kindsByGender} empty="No signed-in games in this range." />
+      </ChartCard>
+      <ChartCard title="Favourite preset mixes by age group" subtitle="Top five per group">
+        {data.presetsByAge.length === 0 && <p className="py-6 text-center text-sm text-gray-500">No preset games in this range.</p>}
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {data.presetsByAge.map((g) => (
+            <div key={g.label}>
+              <p className="mb-2 text-sm font-semibold text-white">{g.label}</p>
+              <BarList items={toBars(g.items)} max={5} />
             </div>
           ))}
         </div>

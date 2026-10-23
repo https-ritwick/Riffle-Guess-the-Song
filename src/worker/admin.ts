@@ -71,7 +71,7 @@ async function liveRooms(env: Env): Promise<AdminRoom[]> {
 // ---------------------------------------------------------------------------
 // Users
 
-const USER_COLUMNS = `u.id, u.name, u.email, u.picture, u.created_at, u.last_login, u.last_seen, u.country, u.city, u.banned_at, u.deleted_at,
+const USER_COLUMNS = `u.id, u.name, u.email, u.picture, u.created_at, u.last_login, u.last_seen, u.country, u.city, u.banned_at, u.deleted_at, u.birth_year, u.gender,
   (SELECT COUNT(*) FROM game_participants p WHERE p.user_id = u.id) AS games,
   (SELECT COUNT(*) FROM group_members m WHERE m.user_id = u.id) AS groups`
 
@@ -391,6 +391,7 @@ async function exportCsv(env: Env, what: string, url: URL): Promise<Response | n
     const { results } = await env.DB.prepare(
       `SELECT u.id, u.name, u.email, datetime(u.created_at / 1000, 'unixepoch') AS created, datetime(u.last_login / 1000, 'unixepoch') AS last_login,
               datetime(u.last_seen / 1000, 'unixepoch') AS last_seen, u.login_count, u.country, u.region, u.city,
+              CAST(strftime('%Y', 'now') AS INTEGER) - u.birth_year AS age, u.gender,
               (SELECT COUNT(*) FROM game_participants p WHERE p.user_id = u.id) AS games,
               CASE WHEN u.banned_at IS NOT NULL THEN 'banned' WHEN u.deleted_at IS NOT NULL THEN 'deleted' ELSE 'active' END AS status
        FROM users u ORDER BY u.created_at`,
@@ -443,7 +444,7 @@ export async function handleAdmin(request: Request, env: Env, url: URL, user: Se
     return json(await reports.overview(env, reports.rangeOf(days(url)), live))
   }
 
-  const report = path.match(/^\/api\/admin\/analytics\/(audience|geo|games|content|retention)$/)
+  const report = path.match(/^\/api\/admin\/analytics\/(audience|geo|games|content|retention|demographics)$/)
   if (report && method === 'GET') {
     const r = reports.rangeOf(days(url))
     switch (report[1]) {
@@ -459,6 +460,8 @@ export async function handleAdmin(request: Request, env: Env, url: URL, user: Se
       }
       case 'retention':
         return json(await reports.retention(env, r))
+      case 'demographics':
+        return json(await reports.demographics(env, r))
     }
   }
 

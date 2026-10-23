@@ -3,6 +3,7 @@ import {
   istDay,
   type AudienceReport,
   type ContentReport,
+  type DemographicsReport,
   type GamesReport,
   type GeoReport,
   type ItemRow,
@@ -11,6 +12,7 @@ import {
   type RetentionReport,
   type Stat,
 } from '../shared/admin'
+import { ageFromBirthYear, GENDER_LABELS, type Gender } from '../shared/account'
 import { findPreset } from '../shared/catalog'
 import { dailyNumber } from '../shared/daily'
 
@@ -114,7 +116,7 @@ export async function overview(env: Env, r: Range, live: { rooms: number; player
     db.prepare(`SELECT (created_at + ${IST_MS}) / ${DAY_MS} AS day, COUNT(*) AS n FROM users WHERE created_at >= ? GROUP BY day`).bind(msFrom),
     db.prepare('SELECT day, COUNT(*) AS n FROM game_events WHERE day BETWEEN ? AND ? GROUP BY day').bind(r.from, r.to),
     db.prepare(
-      `SELECT id, name, email, picture, created_at, last_login, last_seen, country, city, banned_at, deleted_at,
+      `SELECT id, name, email, picture, created_at, last_login, last_seen, country, city, banned_at, deleted_at, birth_year, gender,
               (SELECT COUNT(*) FROM game_participants p WHERE p.user_id = users.id) AS games,
               (SELECT COUNT(*) FROM group_members m WHERE m.user_id = users.id) AS groups
        FROM users ORDER BY created_at DESC LIMIT 6`,
@@ -155,6 +157,8 @@ export function userRow(x: Row, admins: string[] = []): Overview['recentUsers'][
     bannedAt: x.banned_at == null ? null : num(x.banned_at),
     deletedAt: x.deleted_at == null ? null : num(x.deleted_at),
     isAdmin: admins.includes(String(x.email).toLowerCase()),
+    age: ageFromBirthYear(x.birth_year == null ? null : num(x.birth_year)),
+    gender: (x.gender as string | null) ?? null,
   }
 }
 
@@ -421,5 +425,66 @@ export async function retention(env: Env, r: Range): Promise<RetentionReport> {
     })),
     // Daily challenge numbers count from launch; turn them into calendar days.
     dailyChallenge: rows(dailyRows).map((x) => ({ day: num(x.day) + today - daily, players: num(x.players), avgScore: Math.round(num(x.avg)) })),
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+const AGE = "(CAST(strftime('%Y', 'now') AS INTEGER) - u.birth_year)"
+const AGE_GROUP = `CASE WHEN ${AGE} < 18 THEN '13–17' WHEN ${AGE} < 25 THEN '18–24' WHEN ${AGE} < 35 THEN '25–34' WHEN ${AGE} < 45 THEN '35–44' WHEN ${AGE} < 55 THEN '45–54' ELSE '55+' END`
+const AGE_ORDER = ['13–17', '18–24', '25–34', '35–44', '45–54', '55+']
+const GENDER_ORDER = Object.keys(GENDER_LABELS)
+const genderLabel = (v: unknown) => GENDER_LABELS[String(v) as Gender] ?? String(v ?? 'Unknown')
+
+/** Rows of {grp, label, value} → one ranked list per group, groups in a fixed order. */
+function grouped(res: D1Result | undefined, order: string[], groupLabel: (v: string) => string, itemLabel: (v: unknown) => string, top = 6) {
+  const map = new Map<string, Ranked[]>()
+  for (const x of rows(res)) {
+    const list = map.get(String(x.grp)) ?? []
+    list.push({ label: itemLabel(x.label), value: num(x.value) })
+    map.set(String(x.grp), list)
+  }
+  return order.filter((g) => map.has(g)).map((g) => ({ label: groupLabel(g), items: map.get(g)!.sort((a, b) => b.value - a.value).slice(0, top) }))
+}
+
+function inOrder(items: Ranked[], order: string[], label: (v: string) => string = (v) => v): Ranked[] {
+  return order.flatMap((o) => items.filter((i) => i.label === o)).map((i) => ({ ...i, label: label(i.label) }))
+}
+
+export async function demographics(env: Env, r: Range): Promise<DemographicsReport> {
+  const db = env.DB
+  const seats = `FROM game_participants p JOIN users u ON u.id = p.user_id JOIN game_events g ON g.id = p.game_id WHERE g.day BETWEEN ?1 AND ?2`
+  const [accounts, ages, genders, kindsAge, kindsGender, presetsAge, playAge, playGender] = await db.batch([
+    db.prepare(
+      `SELECT COUNT(*) AS total, COALESCE(SUM(u.birth_year IS NOT NULL AND u.gender IS NOT NULL), 0) AS done, AVG(${AGE}) AS avg FROM users u WHERE u.deleted_at IS NULL`,
+    ),
+    db.prepare(`SELECT ${AGE_GROUP} AS label, COUNT(*) AS value FROM users u WHERE u.birth_year IS NOT NULL AND u.deleted_at IS NULL GROUP BY label`),
+    db.prepare('SELECT u.gender AS label, COUNT(*) AS value FROM users u WHERE u.gender IS NOT NULL AND u.deleted_at IS NULL GROUP BY u.gender'),
+    db.prepare(`SELECT ${AGE_GROUP} AS grp, g.kind AS label, COUNT(*) AS value ${seats} AND u.birth_year IS NOT NULL GROUP BY grp, g.kind`).bind(r.from, r.to),
+    db.prepare(`SELECT u.gender AS grp, g.kind AS label, COUNT(*) AS value ${seats} AND u.gender IS NOT NULL GROUP BY grp, g.kind`).bind(r.from, r.to),
+    db.prepare(`SELECT ${AGE_GROUP} AS grp, g.source_label AS label, COUNT(*) AS value ${seats} AND u.birth_year IS NOT NULL AND g.source_kind = 'preset' GROUP BY grp, g.source_label`).bind(
+      r.from,
+      r.to,
+    ),
+    db.prepare(
+      `SELECT ${AGE_GROUP} AS label, COUNT(*) AS value, CAST(SUM(p.correct) AS REAL) * 100 / MAX(SUM(g.rounds_played), 1) AS extra ${seats} AND u.birth_year IS NOT NULL GROUP BY label`,
+    ).bind(r.from, r.to),
+    db.prepare(
+      `SELECT u.gender AS label, COUNT(*) AS value, CAST(SUM(p.correct) AS REAL) * 100 / MAX(SUM(g.rounds_played), 1) AS extra ${seats} AND u.gender IS NOT NULL GROUP BY u.gender`,
+    ).bind(r.from, r.to),
+  ])
+  const a = first(accounts)
+  const kindLabel = (v: unknown) => KIND_LABEL[String(v)] ?? String(v)
+  return {
+    accounts: num(a.total),
+    withProfile: num(a.done),
+    avgAge: a.avg == null ? null : num(a.avg),
+    ages: inOrder(ranked(ages), AGE_ORDER),
+    genders: inOrder(ranked(genders), GENDER_ORDER, genderLabel),
+    kindsByAge: grouped(kindsAge, AGE_ORDER, (g) => g, kindLabel),
+    kindsByGender: grouped(kindsGender, GENDER_ORDER, genderLabel, kindLabel),
+    presetsByAge: grouped(presetsAge, AGE_ORDER, (g) => g, presetName, 5),
+    playByAge: inOrder(ranked(playAge), AGE_ORDER),
+    playByGender: inOrder(ranked(playGender), GENDER_ORDER, genderLabel),
   }
 }

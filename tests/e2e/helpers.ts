@@ -172,4 +172,7 @@ export async function playerNames(page: Page): Promise<string[]> {
 export async function devSignIn(page: Page, name: string, email: string) {
   const res = await page.request.post('/api/auth/dev-login', { data: { name, email } })
   expect(res.ok()).toBe(true)
+  // Signed-in players are asked their age and gender once; answer it so tests go straight to the app.
+  const profile = await page.request.post('/api/me/profile', { data: { age: 25, gender: 'undisclosed' } })
+  expect(profile.ok()).toBe(true)
 }

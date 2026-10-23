@@ -1,5 +1,5 @@
 // Google sign-in (OAuth 2.0 authorization-code flow with PKCE) and cookie sessions.
-import { DevLoginSchema, type AuthConfig, type Me } from '../shared/account'
+import { ageFromBirthYear, DevLoginSchema, MIN_AGE, ProfileSchema, type AuthConfig, type Gender, type Me } from '../shared/account'
 import { BRAND } from '../shared/brand'
 import { json } from './http'
 
@@ -17,6 +17,8 @@ export interface SessionUser {
   email: string
   picture: string | null
   google_sub: string
+  birth_year: number | null
+  gender: Gender | null
 }
 
 // ---------------------------------------------------------------------------
@@ -92,7 +94,7 @@ export async function getSessionUser(request: Request, env: Env): Promise<Sessio
   const token = readCookie(request, SESSION_COOKIE)
   if (!token || token.length > 100) return null
   const row = await env.DB.prepare(
-    `SELECT u.id, u.name, u.email, u.picture, u.google_sub FROM sessions s JOIN users u ON u.id = s.user_id
+    `SELECT u.id, u.name, u.email, u.picture, u.google_sub, u.birth_year, u.gender FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = ? AND s.expires_at > ? AND u.banned_at IS NULL AND u.deleted_at IS NULL`,
   )
     .bind(await sha256(token), Date.now())
@@ -147,8 +149,31 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
 
   if (path === '/api/me' && request.method === 'GET') {
     const user = await getSessionUser(request, env)
-    const me: Me | null = user ? { id: user.id, name: user.name, email: user.email, picture: user.picture, ...(isAdmin(env, url, user) ? { admin: true } : {}) } : null
+    const me: Me | null = user
+      ? {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          picture: user.picture,
+          age: ageFromBirthYear(user.birth_year),
+          gender: user.gender,
+          ...(isAdmin(env, url, user) ? { admin: true } : {}),
+        }
+      : null
     return json({ user: me })
+  }
+
+  // Age and gender, asked once after the first sign-in (and editable from the account menu).
+  if (path === '/api/me/profile' && request.method === 'POST') {
+    const user = await getSessionUser(request, env)
+    if (!user) return json({ error: 'Please sign in first.' }, 401)
+    const body = ProfileSchema.safeParse(await request.json().catch(() => null))
+    if (!body.success) return json({ error: body.error.issues[0]?.message ?? 'Invalid profile' }, 400)
+    if (body.data.age < MIN_AGE) return json({ error: `Riffle is for players aged ${MIN_AGE} and up.` }, 400)
+    await env.DB.prepare('UPDATE users SET birth_year = ?, gender = ?, profile_at = ? WHERE id = ?')
+      .bind(new Date().getUTCFullYear() - body.data.age, body.data.gender, Date.now(), user.id)
+      .run()
+    return json({ ok: true })
   }
 
   if (path === '/api/auth/google/start' && request.method === 'GET') {

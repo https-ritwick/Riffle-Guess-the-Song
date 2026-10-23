@@ -194,6 +194,25 @@ export interface RetentionReport {
   dailyChallenge: { day: number; players: number; avgScore: number }[]
 }
 
+/** Who plays, by age group and gender (from the profile asked at first sign-in). */
+export interface DemographicsReport {
+  accounts: number
+  withProfile: number
+  avgAge: number | null
+  ages: Ranked[]
+  genders: Ranked[]
+  /** Game types chosen by each age group / gender (player seats in this range). */
+  kindsByAge: { label: string; items: Ranked[] }[]
+  kindsByGender: { label: string; items: Ranked[] }[]
+  /** Favourite preset mixes per age group. */
+  presetsByAge: { label: string; items: Ranked[] }[]
+  /** Player seats per age group, with accuracy (%) as extra. */
+  playByAge: Ranked[]
+  playByGender: Ranked[]
+}
+
+export const AGE_GROUPS = ['13–17', '18–24', '25–34', '35–44', '45–54', '55+'] as const
+
 export interface AdminUserRow {
   id: string
   name: string
@@ -209,6 +228,8 @@ export interface AdminUserRow {
   bannedAt: number | null
   deletedAt: number | null
   isAdmin: boolean
+  age: number | null
+  gender: string | null
 }
 
 export interface AdminUserDetail extends AdminUserRow {

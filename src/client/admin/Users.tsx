@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { ArrowLeft, Ban, LogOut, RotateCcw, Search, StickyNote, Trash2, UserX } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
+import { GENDER_LABELS, type Gender } from '../../shared/account'
 import { istDay, type AdminUserDetail, type AdminUserRow, type Page } from '../../shared/admin'
 import { useToast } from '../components/Toasts'
 import { UserPhoto } from '../components/ui'
@@ -23,6 +24,11 @@ const SORTS = [
   { id: 'games', label: 'Most games' },
   { id: 'name', label: 'Name' },
 ]
+
+function profileText(u: Pick<AdminUserRow, 'age' | 'gender'>): string {
+  if (u.age === null && !u.gender) return '—'
+  return [u.age ?? '?', u.gender ? (GENDER_LABELS[u.gender as Gender] ?? u.gender) : '?'].join(' · ')
+}
 
 export function Status({ u }: { u: Pick<AdminUserRow, 'bannedAt' | 'deletedAt' | 'isAdmin'> }) {
   if (u.deletedAt) return <Pill tone="gray">Deleted</Pill>
@@ -103,6 +109,7 @@ export function UsersPage() {
           <thead className="text-left text-xs text-gray-500">
             <tr className="border-b border-white/5">
               <th className="px-4 py-3 font-medium">User</th>
+              <th className="px-4 py-3 font-medium">Age · gender</th>
               <th className="px-4 py-3 font-medium">Location</th>
               <th className="px-4 py-3 text-right font-medium">Games</th>
               <th className="px-4 py-3 text-right font-medium">Groups</th>
@@ -116,14 +123,14 @@ export function UsersPage() {
               !error &&
               Array.from({ length: 6 }, (_, i) => (
                 <tr key={i}>
-                  <td colSpan={7} className="px-4 py-2">
+                  <td colSpan={8} className="px-4 py-2">
                     <Skeleton className="h-9" />
                   </td>
                 </tr>
               ))}
             {data?.rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
+                <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
                   No users match.
                 </td>
               </tr>
@@ -139,6 +146,7 @@ export function UsersPage() {
                     </span>
                   </Link>
                 </td>
+                <td className="px-4 py-2.5 whitespace-nowrap text-gray-300">{profileText(u)}</td>
                 <td className="px-4 py-2.5 whitespace-nowrap text-gray-300" title={countryName(u.country)}>
                   {flag(u.country)} {u.city ?? (u.country ? countryName(u.country) : '—')}
                 </td>
@@ -297,6 +305,7 @@ export function UserDetailPage() {
         </ChartCard>
         <ChartCard title="Account">
           <dl className="grid grid-cols-2 gap-4">
+            <Fact label="Age · gender">{profileText(u)}</Fact>
             <Fact label="Joined">{when(u.createdAt)}</Fact>
             <Fact label="Last sign-in">{ago(u.lastLogin)}</Fact>
             <Fact label="Last seen">{ago(u.lastSeen)}</Fact>
