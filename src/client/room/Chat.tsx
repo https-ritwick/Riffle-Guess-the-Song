@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, 
 import { EMOJI_SETS, findSticker, isEmojiOnly, MAX_CHAT_LENGTH, STICKERS, type ChatMessage, type StickerId } from '../../shared/chat'
 import type { PublicPlayer } from '../../shared/protocol'
 import { PlayerAvatar } from '../components/ui'
+import { useSite } from '../lib/site'
 import { load, save } from '../lib/storage'
 import type { VoiceChannel, VoiceSnapshot } from '../lib/voice'
 import { useRoomContext } from './context'
@@ -159,6 +160,7 @@ const OPEN_KEY = 'chat:open'
  */
 export function ChatDock({ messages, voice, snapshot, raised }: { messages: ChatMessage[]; voice: VoiceChannel; snapshot: VoiceSnapshot; raised?: boolean }) {
   const { state, you, send, serverNow } = useRoomContext()
+  const { features } = useSite()
   const [open, setOpen] = useState(() => load(OPEN_KEY) === '1' && window.matchMedia('(min-width: 1024px)').matches)
   const [draft, setDraft] = useState('')
   const [picker, setPicker] = useState<Picker>(null)
@@ -275,7 +277,7 @@ export function ChatDock({ messages, voice, snapshot, raised }: { messages: Chat
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className={clsx('rounded-2xl bg-white/[0.04] p-2.5 ring-1 ring-white/5', picker && 'max-sm:hidden')}>
+            <div className={clsx('rounded-2xl bg-white/[0.04] p-2.5 ring-1 ring-white/5', picker && 'max-sm:hidden', !features.voice && 'hidden')}>
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-gray-300 uppercase">
                   <Headphones className="h-3.5 w-3.5" /> Voice · {inVoice.length}
@@ -330,7 +332,8 @@ export function ChatDock({ messages, voice, snapshot, raised }: { messages: Chat
           {picker === 'emoji' && <EmojiPicker onPick={insertEmoji} />}
           {picker === 'sticker' && <StickerPicker onPick={sendSticker} />}
 
-          <form onSubmit={submit} className="flex items-end gap-1.5 border-t border-white/10 p-2.5">
+          {!features.chat && <p className="border-t border-white/10 p-3 text-center text-xs text-gray-400">Chat is paused right now.</p>}
+          <form onSubmit={submit} className={clsx('flex items-end gap-1.5 border-t border-white/10 p-2.5', !features.chat && 'hidden')}>
             <button
               type="button"
               onClick={() => setPicker((p) => (p === 'emoji' ? null : 'emoji'))}
@@ -407,7 +410,7 @@ export function ChatDock({ messages, voice, snapshot, raised }: { messages: Chat
           aria-label={snapshot.joined ? 'Leave voice channel' : 'Join voice channel'}
           aria-pressed={snapshot.joined}
           title={snapshot.joined ? 'Leave voice' : 'Join voice (listen)'}
-          className={clsx(dockButton, snapshot.joined ? 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/40' : 'bg-white/[0.06] text-gray-200 ring-white/10 hover:bg-white/[0.12]')}
+          className={clsx(dockButton, snapshot.joined ? 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/40' : 'bg-white/[0.06] text-gray-200 ring-white/10 hover:bg-white/[0.12]', !features.voice && 'hidden')}
         >
           <Headphones className="h-5 w-5" />
           {inVoice.length > 0 && (
@@ -426,6 +429,7 @@ export function ChatDock({ messages, voice, snapshot, raised }: { messages: Chat
           data-testid="mic-toggle"
           className={clsx(
             dockButton,
+            !features.voice && 'hidden',
             snapshot.joined && !snapshot.muted
               ? 'bg-emerald-500 text-black ring-emerald-300'
               : snapshot.micError

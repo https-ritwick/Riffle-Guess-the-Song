@@ -29,6 +29,13 @@ The original gameplay screen was modelled on the public parts of [Tapzz](https:/
 - **Career:** every game earns XP towards nine filmi ranks (Junior Artist → Bollywood Ka Baadshah), keeps a day streak, and unlocks 14 badges (Pehli Picture, Dhoom, Hat-trick, Raat Baaki Hai…). Stored on the device.
 - **Streak hype:** a burst on the screen at 3, 4, 5, 7 and 10+ right answers in a row.
 - **Emoji songs play as soon as you crack them,** while everyone else is still thinking. AI emoji puzzles come with a word-by-word decode (shown at the reveal) and are only used when iTunes finds the song.
+**Admin console & analytics** (`/admin`, only for the site owner's Google account)
+- **Overview:** visitors, signed-in users, sign-ups, games, player seats and rooms vs the previous period, a daily activity chart, live players and the latest admin actions.
+- **Analytics:** audience (daily/weekly/monthly visitors, stickiness, returning visits, devices, OS, browsers, referrers, top pages, a weekday × hour heatmap), geography (countries, states, cities and which game modes each country plays), games & preferences (modes, game types, music sources, favourite presets, difficulty, rounds, timer, group size, finish rate, accuracy, chat/voice use, feature use), songs & questions (most played, hardest, easiest, top artists) and retention (weekly visitor and account cohorts, most active players, daily challenge turnout). Range picker (7d/30d/90d/1y) and CSV exports.
+- **Manage everything:** search users and open a full profile (stats, favourite modes and music, devices, activity, games, groups), ban/unban with a reason, sign out everywhere, delete/restore, erase for good (privacy requests), private notes; rename/delete groups, switch invite links and guest access, remove members; see live rooms and close them or remove players; remove daily-challenge scores; change the site banner, turn on maintenance mode and switch chat, voice, AI, Spotify, group creation and the daily challenge on or off without a deploy. Every change goes into an audit log.
+- **Privacy-first tracking:** first-party and cookie-free. A random per-browser id (only its hash is stored), approximate location from Cloudflare (IP addresses are never stored), device from the user-agent. Global Privacy Control / Do Not Track are honoured and anyone can opt out on the Privacy page. Old visit data is deleted after ~13 months by a daily cron.
+- **Terms of Service** (`/terms`) and **Privacy Policy** (`/privacy`), linked from the footer and the sign-in button.
+
 - **Share sheet:** a Story-sized (9:16) or square result poster drawn in the browser with the game's album covers, for Instagram Story and WhatsApp Status through the phone's share sheet, plus WhatsApp chat, X, copy text, download, and a "beat my score" link that opens a solo game of the same mode with the challenge shown.
 
 **No repeats**
@@ -179,11 +186,19 @@ tests/e2e          Playwright: multiplayer games, playlists, suggestions, groups
 | `group_members` | (group, user, role `admin`/`member`) |
 | `group_invites` | pending invitations by email |
 | `games`, `game_players` | finished group games and per-player score, correct answers, rank |
+| `app_config` | site banner, maintenance mode and feature switches set from the admin console |
+| `admin_actions` | audit log of every admin change |
+| `visitors`, `visits`, `page_views`, `feature_usage` | first-party analytics: hashed browser id, IST day, approximate location, device, referrer, pages, feature taps |
+| `rooms_log` | every room created (finds live rooms for the console) |
+| `game_events`, `game_participants` | every game played anywhere, with settings, players, scores, accuracy, social use and location |
+| `item_stats` | plays and accuracy for every song and challenge question |
 | `spotify_links` | a browser's Spotify connection: hashed cookie token, display name, photo, and the top tracks read at connect time (no Spotify tokens are kept) |
 
 `groups.played_json` (migration 0003) keeps the group's recently played song keys and question ids.
 
-Schema: `migrations/0001_init.sql` to `migrations/0004_daily.sql`.
+Migration 0005 also adds ban/delete/notes, sign-in count, last seen and approximate location to `users`, and backfills existing group games into the analytics tables.
+
+Schema: `migrations/0001_init.sql` to `migrations/0005_admin_analytics.sql`.
 
 ## Run locally
 
@@ -220,6 +235,7 @@ npm run covers       # regenerate real tile artwork (paced, ~7 min)
 | `GEMINI_API_KEY` | Worker secret | Optional. Google Gemini writes fresh challenge questions and award names. Without it the built-in bank and award pools are used. |
 | `GEMINI_MODEL` | Worker variable | Optional. A Gemini model to try first (otherwise a built-in list of current Flash models is tried in order). |
 | `TURN_KEY_ID` / `TURN_KEY_API_TOKEN` | Worker secrets | Optional. A Cloudflare TURN key (dashboard → Realtime → TURN) so voice chat also works for players on strict NATs/firewalls. Without it, `GET /api/rtc/ice` hands out STUN servers only. |
+| `ADMIN_EMAILS` | Worker variable | Optional. Comma-separated Google accounts allowed into `/admin`. Defaults to the site owner's email in `src/shared/brand.ts`. |
 | `DEV_LOGIN` | `.dev.vars` only | `true` enables developer sign-in on localhost. Never set in production. |
 
 Bindings (in `wrangler.jsonc`): `ROOMS` (Durable Object), `DB` (D1 `riffle-db`), `CREATE_LIMITER` / `CONNECT_LIMITER` (rate limits), `ASSETS`.
@@ -304,6 +320,7 @@ Then open `/api/ai/health` on your site: it reports whether the key works and wh
 - **Playlist fetching:** URLs are built only from validated IDs on two fixed hosts, so there's no SSRF risk.
 - **Media sources:** audio, artwork and links must come from known Apple or Spotify CDNs.
 - **Browser hardening:** a strict Content Security Policy (`public/_headers`), `nosniff`, and no framing. User text is always rendered as text.
+- **Admin console:** `/api/admin/*` answers 404 unless the session belongs to a Google-verified email in `ADMIN_EMAILS` (developer sign-ins only count on localhost). Admins can't ban or delete themselves, and every change is audit-logged.
 - **Developer login:** exists only when `DEV_LOGIN=true` **and** the host is `localhost`.
 
 ## Known limitations

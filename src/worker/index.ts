@@ -1,7 +1,9 @@
 import { dailyGame, dailyNumber, msUntilNextDaily, type DailyBoard } from '../shared/daily'
 import { DEFAULT_SETTINGS, GameKindSchema, ROOM_CODE_RE } from '../shared/protocol'
 import { aiHealth } from './ai'
-import { getSessionUser, handleAuth } from './auth'
+import { handleAdmin } from './admin'
+import { geoOf, handleTrack, logRoom, purgeOldData, siteConfig } from './analytics'
+import { getSessionUser, handleAuth, isAdmin } from './auth'
 import { handleGroups, isGroupMember } from './groups'
 import { json } from './http'
 import { getPlaylist, PlaylistError, PlaylistQuerySchema } from './playlist'
@@ -11,7 +13,7 @@ import { handleSpotify } from './spotify'
 export { GameRoom } from './room'
 
 /** Headers the Worker sets for the room after checking the session; never trusted from clients. */
-export const IDENTITY_HEADERS = ['x-encore-user', 'x-encore-member'] as const
+export const IDENTITY_HEADERS = ['x-encore-user', 'x-encore-member', 'x-encore-geo', 'x-encore-off'] as const
 
 function clientKey(request: Request): string {
   return request.headers.get('CF-Connecting-IP') ?? 'local'
@@ -35,7 +37,12 @@ async function handleRooms(request: Request, env: Env, url: URL): Promise<Respon
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
     const { success } = await env.CREATE_LIMITER.limit({ key: clientKey(request) })
     if (!success) return json({ error: 'Too many rooms created. Try again in a minute.' }, 429)
+    const user = await getSessionUser(request, env)
+    const config = await siteConfig(env)
+    // Maintenance pauses new rooms for everyone but admins.
+    if (config.maintenance.enabled && !isAdmin(env, url, user)) return json({ error: config.maintenance.message || 'New games are paused for maintenance.' }, 503)
     const body = (await request.json().catch(() => null)) as { solo?: unknown; daily?: unknown; game?: unknown } | null
+    if (body?.daily === true && !config.features.daily) return json({ error: 'The daily challenge is taking a break today.' }, 503)
     // A preset game (from a "beat my score" link) or today's daily challenge.
     const game = GameKindSchema.safeParse(body?.game)
     const code = await allocateRoom(env, {
@@ -43,6 +50,7 @@ async function handleRooms(request: Request, env: Env, url: URL): Promise<Respon
       ...(body?.daily === true ? { daily: dailyNumber() } : {}),
       ...(game.success ? { settings: { ...DEFAULT_SETTINGS, game: game.data } } : {}),
     })
+    if (code) await logRoom(env, code, body?.daily === true ? 'daily' : body?.solo === true ? 'solo' : 'party', request, user)
     return code ? json({ code }, 201) : json({ error: 'Could not allocate a room code. Please try again.' }, 503)
   }
 
@@ -65,6 +73,11 @@ async function handleRooms(request: Request, env: Env, url: URL): Promise<Respon
   // Tell the room who this is (if signed in) and whether they belong to the room's group.
   const headers = new Headers(request.headers)
   for (const h of IDENTITY_HEADERS) headers.delete(h)
+  // Rough location and device for analytics, and any features the admin has switched off.
+  const geo = geoOf(request)
+  headers.set('x-encore-geo', JSON.stringify({ country: geo.country, region: geo.region, city: geo.city, device: geo.device }))
+  const { features } = await siteConfig(env)
+  headers.set('x-encore-off', (['chat', 'voice', 'ai'] as const).filter((f) => !features[f]).join(','))
   const user = await getSessionUser(request, env)
   if (user) {
     headers.set('x-encore-user', JSON.stringify({ id: user.id, name: user.name, picture: user.picture }))
@@ -120,6 +133,17 @@ async function iceServers(env: Env): Promise<{ iceServers: unknown[] }> {
   }
 }
 
+/** Features the admin switched off answer as if they weren't set up. */
+async function featureSwitches(request: Request, env: Env, pathname: string): Promise<Response | null> {
+  const watched = pathname === '/api/spotify/config' || pathname === '/api/spotify/start' || (pathname === '/api/groups' && request.method === 'POST')
+  if (!watched) return null
+  const { features } = await siteConfig(env)
+  if (!features.spotify && pathname === '/api/spotify/config') return json({ enabled: false })
+  if (!features.spotify && pathname === '/api/spotify/start') return json({ error: 'Spotify connect is turned off right now.' }, 503)
+  if (!features.groups && pathname === '/api/groups') return json({ error: 'Creating new groups is paused right now.' }, 503)
+  return null
+}
+
 async function handlePlaylist(request: Request, env: Env, url: URL, ctx: ExecutionContext): Promise<Response | null> {
   if (url.pathname !== '/api/playlist') return null
   if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405)
@@ -162,16 +186,30 @@ export default {
     }
 
     try {
+      if (pathname === '/api/config' && request.method === 'GET') return json(await siteConfig(env))
+      if (pathname === '/api/track' && request.method === 'POST') {
+        const { success } = await env.CONNECT_LIMITER.limit({ key: `track:${clientKey(request)}` })
+        if (!success) return json({ ok: true, counted: false })
+        return await handleTrack(request, env, url, await getSessionUser(request, env))
+      }
+      const switched = await featureSwitches(request, env, pathname)
+      if (switched) return switched
       const response =
         (await handleRooms(request, env, url)) ??
         (await handlePlaylist(request, env, url, ctx)) ??
         (await handleSpotify(request, env, url, clientKey(request))) ??
         (await handleAuth(request, env, url)) ??
+        (await handleAdmin(request, env, url, await getSessionUser(request, env))) ??
         (await handleGroups(request, env, url, await getSessionUser(request, env)))
       return response ?? json({ error: 'Not found' }, 404)
     } catch (err) {
       console.error('request failed', pathname, err)
       return json({ error: 'Something went wrong. Please try again.' }, 500)
     }
+  },
+
+  // Daily clean-up: old analytics rows, expired sessions and Spotify links.
+  async scheduled(_controller, env, ctx): Promise<void> {
+    ctx.waitUntil(purgeOldData(env).catch((err) => console.error('scheduled clean-up failed', err)))
   },
 } satisfies ExportedHandler<Env>

@@ -17,6 +17,7 @@ import {
   type PendingInvite,
 } from '../shared/account'
 import { normalizeSettings } from '../shared/protocol'
+import { logRoom } from './analytics'
 import { randomToken, type SessionUser } from './auth'
 import { json } from './http'
 import { allocateRoom, roomStub } from './rooms'
@@ -25,7 +26,7 @@ const MAX_GROUPS_PER_USER = 30
 const MAX_MEMBERS = 50
 const LIVE_STALE_MS = 3 * 60 * 1000
 
-interface GroupRow {
+export interface GroupRow {
   id: string
   name: string
   owner_id: string
@@ -212,7 +213,7 @@ async function addMember(env: Env, groupId: string, userId: string, role: Role):
 }
 
 /** Remove a member; keep at least one admin, and delete the group when it empties. */
-async function removeMember(env: Env, group: GroupRow, userId: string): Promise<void> {
+export async function removeMember(env: Env, group: GroupRow, userId: string): Promise<void> {
   await env.DB.prepare('DELETE FROM group_members WHERE group_id = ? AND user_id = ?').bind(group.id, userId).run()
   const remaining = await env.DB.prepare('SELECT user_id, role FROM group_members WHERE group_id = ? ORDER BY joined_at')
     .bind(group.id)
@@ -316,6 +317,7 @@ export async function handleGroups(request: Request, env: Env, url: URL, user: S
     })
     if (!code) return json({ error: 'Could not create a room. Try again.' }, 503)
     await env.DB.prepare('UPDATE groups SET active_room = ?, active_room_at = ? WHERE id = ?').bind(code, Date.now(), group.id).run()
+    await logRoom(env, code, 'group', request, user)
     return json({ code, existing: false }, 201)
   }
 

@@ -40,6 +40,7 @@ import {
 } from '../shared/rules'
 import { sanitizeName } from '../shared/text'
 import { matchSong, songSearchUrl, type SongClip, type SongRef } from '../shared/songs'
+import { istDay, type AdminRoom } from '../shared/admin'
 import { aiEnabled, generateAwardNames, generateChallenges } from './ai'
 import { json } from './http'
 import { spotifyArtwork } from './playlist'
@@ -77,6 +78,15 @@ interface PlayerRecord {
   leftAt: number | null
   /** In the voice channel (cleared when they disconnect). */
   voice?: VoiceState | null
+  /** Rough location and device, for analytics (from Cloudflare, set by our Worker). */
+  geo?: PlayerGeo | null
+}
+
+interface PlayerGeo {
+  country: string | null
+  region: string | null
+  city: string | null
+  device: string
 }
 
 interface AnswerRecord {
@@ -114,6 +124,9 @@ interface GameRecord {
   recorded: boolean
   /** This game's filmy award names (built-in first, AI-written ones when they arrive). */
   awardNames?: Record<string, AwardName>
+  /** When the game began, and whether it has gone into the analytics tables. */
+  createdAt?: number
+  tracked?: boolean
 }
 
 interface RoomRecord {
@@ -142,6 +155,8 @@ interface RoomRecord {
   recentAwards: string[]
   /** Daily challenge rooms: which day's challenge (one attempt, recorded on the daily leaderboard). */
   daily: number | null
+  /** Social activity since the last game was recorded (for analytics). */
+  activity?: { chats: number; reactions: number; voice: string[] }
 }
 
 /** AI-written challenge questions waiting to be played, and summaries of ones already used. */
@@ -162,6 +177,9 @@ interface Attachment {
   lastChat?: number
   user: SessionIdentity | null
   member: boolean
+  geo?: PlayerGeo | null
+  /** Site switches the admin turned off ('chat', 'voice'). */
+  off?: string[]
 }
 
 const IN_GAME: Phase[] = ['countdown', 'question', 'reveal']
@@ -228,6 +246,8 @@ export class GameRoom extends DurableObject<Env> {
   private artCache = new Map<string, string | null>()
   /** Recent chat messages (kept under their own key so answers don't rewrite them). */
   private chat: ChatMessage[] = []
+  /** The admin can switch AI off site-wide; each new connection brings the current setting. */
+  private aiSwitch = true
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
@@ -329,6 +349,74 @@ export class GameRoom extends DurableObject<Env> {
     return this.room?.played ?? []
   }
 
+  /** Admin console: everything about this room right now (null once it's gone). */
+  async adminInfo(): Promise<AdminRoom | null> {
+    const room = this.room
+    if (!room || Date.now() - room.lastActive >= IDLE_TTL_MS) return null
+    const game = room.game
+    return {
+      code: room.code,
+      createdAt: room.createdAt,
+      lastActive: room.lastActive,
+      phase: room.phase,
+      kind: room.settings.game,
+      source: sourceTitle(room.settings),
+      group: room.group?.name ?? null,
+      solo: room.solo,
+      daily: room.daily,
+      round: game && IN_GAME.includes(room.phase) ? game.index + 1 : null,
+      rounds: game ? game.questions.length : null,
+      players: room.players.map((p) => ({
+        id: p.id,
+        name: p.name,
+        userId: p.userId,
+        connected: p.connected,
+        score: p.score,
+        host: p.id === room.hostId,
+        country: p.geo?.country ?? null,
+      })),
+      chats: this.chat.length,
+    }
+  }
+
+  /** Admin console: shut the room, telling everyone in it why. */
+  async adminClose(message: string): Promise<boolean> {
+    if (!this.room) return false
+    if (this.room.game) this.trackGame(this.room.game)
+    for (const ws of this.ctx.getWebSockets()) {
+      this.send(ws, { t: 'error', code: 'room_closed', message: message || 'This room was closed by the Riffle team.' })
+      try {
+        ws.close(4004, 'Room closed')
+      } catch {
+        // already closed
+      }
+    }
+    await this.ctx.storage.deleteAll()
+    this.room = null
+    this.blend = {}
+    this.chat = []
+    return true
+  }
+
+  /** Admin console: remove one player from the room. */
+  async adminKick(playerId: string): Promise<boolean> {
+    const room = this.room
+    const target = room?.players.find((p) => p.id === playerId)
+    if (!room || !target) return false
+    room.players = room.players.filter((p) => p.id !== target.id)
+    if (room.game) delete room.game.answers[target.id]
+    this.dropBlend(target.id)
+    for (const s of this.socketsOf(target.id)) {
+      this.send(s, { t: 'kicked' })
+      s.serializeAttachment({ ...this.attachment(s), pid: null } satisfies Attachment)
+      s.close(4003, 'Removed by host')
+    }
+    if (room.hostId === target.id) this.transferHost()
+    if (room.phase === 'question' && this.everyoneAnswered()) this.reveal(Date.now())
+    await this.commit()
+    return true
+  }
+
   override async fetch(request: Request): Promise<Response> {
     if (!this.room) return json({ error: 'Room not found' }, 404)
     if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
@@ -345,7 +433,16 @@ export class GameRoom extends DurableObject<Env> {
     const pair = new WebSocketPair()
     const [client, server] = [pair[0], pair[1]]
     this.ctx.acceptWebSocket(server)
-    server.serializeAttachment({ pid: null, lastReaction: 0, user, member: request.headers.get('x-encore-member') === '1' } satisfies Attachment)
+    let geo: PlayerGeo | null = null
+    try {
+      const raw = request.headers.get('x-encore-geo')
+      if (raw) geo = JSON.parse(raw) as PlayerGeo
+    } catch {
+      geo = null
+    }
+    const off = (request.headers.get('x-encore-off') ?? '').split(',').filter(Boolean)
+    this.aiSwitch = !off.includes('ai')
+    server.serializeAttachment({ pid: null, lastReaction: 0, user, member: request.headers.get('x-encore-member') === '1', geo, off } satisfies Attachment)
     this.room.lastActive = Date.now()
     this.sendState(server)
     return new Response(null, { status: 101, webSocket: client })
@@ -406,6 +503,7 @@ export class GameRoom extends DurableObject<Env> {
       }
       // Nobody is watching: don't keep cycling through rounds.
       if (IN_GAME.includes(room.phase) || room.phase === 'loading') {
+        if (room.game) this.trackGame(room.game)
         room.phase = room.game ? 'results' : 'lobby'
         room.phaseEndsAt = null
       }
@@ -443,6 +541,7 @@ export class GameRoom extends DurableObject<Env> {
       case 'react': {
         if (now - att.lastReaction < REACTION_COOLDOWN_MS) return false
         ws.serializeAttachment({ ...att, lastReaction: now } satisfies Attachment)
+        this.activity().reactions += 1
         this.broadcastRaw({ t: 'reaction', from: player.id, emoji: msg.emoji })
         return false
       }
@@ -456,7 +555,7 @@ export class GameRoom extends DurableObject<Env> {
       }
 
       case 'chat': {
-        if (room.solo || now - (att.lastChat ?? 0) < CHAT_COOLDOWN_MS) return false
+        if (room.solo || att.off?.includes('chat') || now - (att.lastChat ?? 0) < CHAT_COOLDOWN_MS) return false
         const text = msg.text !== undefined ? sanitizeChat(msg.text) : ''
         if (!text && !msg.sticker) return false
         ws.serializeAttachment({ ...att, lastChat: now } satisfies Attachment)
@@ -470,6 +569,7 @@ export class GameRoom extends DurableObject<Env> {
           ...(msg.sticker ? { sticker: msg.sticker } : { text }),
         }
         this.chat = [...this.chat.slice(-(CHAT_HISTORY - 1)), message]
+        this.activity().chats += 1
         this.broadcastRaw({ t: 'chat', message })
         await this.ctx.storage.put('chat', this.chat)
         return false
@@ -477,7 +577,10 @@ export class GameRoom extends DurableObject<Env> {
 
       case 'voice': {
         if (room.solo || (player.voice ?? null) === msg.state) return false
+        if (msg.state && att.off?.includes('voice')) return false
         player.voice = msg.state
+        const activity = this.activity()
+        if (msg.state && !activity.voice.includes(player.id)) activity.voice.push(player.id)
         return true
       }
 
@@ -591,6 +694,7 @@ export class GameRoom extends DurableObject<Env> {
 
       case 'lobby': {
         if (room.phase === 'lobby') return false
+        if (room.game) this.trackGame(room.game)
         room.phase = 'lobby'
         room.phaseEndsAt = null
         room.game = null
@@ -635,6 +739,7 @@ export class GameRoom extends DurableObject<Env> {
       player.name = name
       player.connected = true
       player.leftAt = null
+      if (att.geo) player.geo = att.geo
       if (att.user) {
         player.userId = att.user.id
         player.photo = att.user.picture
@@ -666,6 +771,7 @@ export class GameRoom extends DurableObject<Env> {
         connected: true,
         joinedAt: now,
         leftAt: null,
+        geo: att.geo ?? null,
       }
       room.players.push(player)
     }
@@ -849,7 +955,7 @@ export class GameRoom extends DurableObject<Env> {
     this.pruneStalePlayers(now)
     this.resetScores()
     const awardNames = pickAwardNames(secureRandom, room.recentAwards)
-    const game: GameRecord = { id: crypto.randomUUID(), questions, index: 0, startsAt: 0, endsAt: 0, answers: {}, history: [], recorded: false, awardNames }
+    const game: GameRecord = { id: crypto.randomUUID(), questions, index: 0, startsAt: 0, endsAt: 0, answers: {}, history: [], recorded: false, awardNames, createdAt: now }
     room.game = game
     room.phase = 'countdown'
     room.phaseEndsAt = now + COUNTDOWN_MS
@@ -858,7 +964,7 @@ export class GameRoom extends DurableObject<Env> {
     room.recentAwards = [...room.recentAwards, ...Object.values(awardNames).map((n) => n.title)].slice(-80)
     this.ctx.waitUntil(Promise.all([this.enrichRound(game, 0), this.enrichRound(game, 1)]))
     if (room.group) this.ctx.waitUntil(this.saveGroupSettings())
-    if (aiEnabled(this.env)) this.ctx.waitUntil(this.nameAwards(game))
+    if (this.aiOn()) this.ctx.waitUntil(this.nameAwards(game))
   }
 
   private backToMenu(notice: string): void {
@@ -1032,6 +1138,135 @@ export class GameRoom extends DurableObject<Env> {
       room.game.recorded = true
       this.ctx.waitUntil(this.recordDaily(room.daily))
     }
+    if (room.game) this.trackGame(room.game)
+  }
+
+  private aiOn(): boolean {
+    return this.aiSwitch && aiEnabled(this.env)
+  }
+
+  private activity(): NonNullable<RoomRecord['activity']> {
+    const room = this.room!
+    room.activity ??= { chats: 0, reactions: 0, voice: [] }
+    return room.activity
+  }
+
+  /**
+   * Every game (finished, ended early or abandoned) goes into the analytics tables once:
+   * one game row, a row per player and per-question answer stats.
+   */
+  private trackGame(game: GameRecord): void {
+    const room = this.room!
+    if (game.tracked || game.history.length === 0) return
+    game.tracked = true
+    const now = Date.now()
+    const startedAt = game.createdAt ?? now
+    const activity = this.activity()
+    room.activity = { chats: 0, reactions: 0, voice: [] }
+    const settings = room.settings
+    const ranked = [...room.players].sort((a, b) => b.score - a.score || b.correct - a.correct)
+    const rounds = game.history.length
+    const perPlayer = ranked.map((p, i) => {
+      const picks = game.history.map((h) => h.picks[p.id]).filter((x): x is Pick => !!x && x.choice !== null)
+      const ms = picks.map((x) => x.ms ?? 0)
+      return { p, rank: i + 1, answered: picks.length, avgMs: ms.length ? Math.round(ms.reduce((a, b) => a + b, 0) / ms.length) : null }
+    })
+    const host = room.players.find((p) => p.id === room.hostId)
+    const totalCorrect = ranked.reduce((a, p) => a + p.correct, 0)
+    const source = settings.source
+    const mode = room.daily ? 'daily' : room.group ? 'group' : room.solo ? 'solo' : 'party'
+    const sourceKind = settings.game === 'songs' ? source.kind : 'challenge'
+    // Presets are stored by id (names can change); everything else by its title.
+    const sourceLabel = (settings.game === 'songs' && source.kind === 'preset' ? source.id : sourceTitle(settings)).slice(0, 120)
+    const db = this.env.DB
+    const statements: D1PreparedStatement[] = [
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO game_events (id, day, room_code, mode, kind, source_kind, source_label, region, difficulty, answer_type, rounds, rounds_played,
+             guess_seconds, live_scoring, group_id, players, signed_in, completed, accuracy, top_score, chats, reactions, voice_users, country, started_at, ended_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          game.id,
+          istDay(startedAt),
+          room.code,
+          mode,
+          settings.game,
+          sourceKind,
+          sourceLabel,
+          settings.region,
+          settings.difficulty,
+          settings.answerType,
+          game.questions.length,
+          rounds,
+          settings.guessSeconds,
+          settings.liveScoring ? 1 : 0,
+          room.group?.id ?? null,
+          ranked.length,
+          ranked.filter((p) => p.userId).length,
+          rounds >= game.questions.length ? 1 : 0,
+          ranked.length ? totalCorrect / (ranked.length * rounds) : null,
+          ranked[0]?.score ?? 0,
+          activity.chats,
+          activity.reactions,
+          activity.voice.length,
+          host?.geo?.country ?? null,
+          startedAt,
+          now,
+        ),
+      ...perPlayer.map(({ p, rank, answered, avgMs }) =>
+        db
+          .prepare(
+            `INSERT OR IGNORE INTO game_participants (game_id, player_id, user_id, name, country, region, city, device, score, correct, answered, rank, best_streak, avg_ms, is_host)
+             VALUES (?, ?, (SELECT id FROM users WHERE id = ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            game.id,
+            p.id,
+            p.userId,
+            p.name,
+            p.geo?.country ?? null,
+            p.geo?.region ?? null,
+            p.geo?.city ?? null,
+            p.geo?.device ?? null,
+            p.score,
+            p.correct,
+            answered,
+            rank,
+            p.bestStreak,
+            avgMs,
+            p.id === room.hostId ? 1 : 0,
+          ),
+      ),
+      ...game.history.map((h) => {
+        const kind = h.challenge?.kind ?? 'song'
+        const picks = Object.values(h.picks).filter((x) => x.choice !== null)
+        const title = (h.challenge ? (h.options[h.correct] ?? h.track.title) : h.track.title).slice(0, 160)
+        const subtitle = (h.challenge ? h.challenge.prompt || h.track.title : h.track.artist).slice(0, 160)
+        return db
+          .prepare(
+            `INSERT INTO item_stats (key, kind, title, subtitle, plays, answers, correct, total_ms, last_played) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
+             ON CONFLICT (key) DO UPDATE SET plays = plays + 1, answers = answers + excluded.answers, correct = correct + excluded.correct,
+               total_ms = total_ms + excluded.total_ms, last_played = excluded.last_played, title = excluded.title, subtitle = excluded.subtitle`,
+          )
+          .bind(
+            `${kind}:${playedKey(h.track, h.mode)}`.slice(0, 200),
+            kind,
+            title,
+            subtitle,
+            picks.length,
+            picks.filter((x) => x.correct).length,
+            picks.reduce((a, x) => a + (x.ms ?? 0), 0),
+            now,
+          )
+      }),
+    ]
+    this.ctx.waitUntil(
+      db.batch(statements).then(
+        () => undefined,
+        (err) => console.error('recording analytics failed (is migration 0005 applied?)', err),
+      ),
+    )
   }
 
   private everyoneAnswered(): boolean {
@@ -1126,7 +1361,7 @@ export class GameRoom extends DurableObject<Env> {
   /** Have the AI write questions for the room's current challenge, unless enough are ready. */
   private prefetch(): void {
     const game = this.room?.settings.game
-    if (!game || game === 'songs' || this.room?.daily || !aiEnabled(this.env) || this.aiInflight.has(game)) return
+    if (!game || game === 'songs' || this.room?.daily || !this.aiOn() || this.aiInflight.has(game)) return
     if (this.unplayedAi(game).length >= AI_TARGET) return
     const task = (async () => {
       let items = await generateChallenges(this.env, game, AI_TARGET, this.ai.seen[game] ?? [])
@@ -1372,7 +1607,7 @@ export class GameRoom extends DurableObject<Env> {
       blend: Object.entries(room.blendMeta)
         .filter(([, sources]) => sources.length > 0)
         .map(([playerId, sources]) => ({ playerId, ...sources[0]!, count: sources.reduce((n, s) => n + s.count, 0), sources })),
-      ai: aiEnabled(this.env),
+      ai: this.aiOn(),
       daily: room.daily,
       awardNames: room.phase === 'results' || room.phase === 'loading' ? (game?.awardNames ?? null) : null,
     }

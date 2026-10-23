@@ -8,6 +8,7 @@ import { SignInButton } from '../components/UserMenu'
 import { Button, Card, Input, Logo, Spinner } from '../components/ui'
 import { player, usePlayer } from '../lib/audio'
 import { useAuth } from '../lib/auth'
+import { useSite } from '../lib/site'
 import { describeSource } from '../lib/source'
 import { load } from '../lib/storage'
 import { useRoom } from '../lib/useRoom'
@@ -164,6 +165,7 @@ function RoomView({ code }: { code: string }) {
   const room = useRoom(code)
   const { status, state, you, error, send, join, leave, serverNow, reactions, wantsSeat, suggestion, chat, seat, onRtc } = room
   const [joining, setJoining] = useState(false)
+  const { features } = useSite()
   const { voice, snapshot: voiceState, onSignal } = useVoice(send, you, state?.players, seat)
   useEffect(() => {
     onRtc(onSignal)
@@ -288,7 +290,7 @@ function RoomView({ code }: { code: string }) {
           <GameView />
         )}
         <Reactions reactions={reactions} players={ctx.state.players} />
-        <ChatDock messages={chat} voice={voice} snapshot={voiceState} raised={phase === 'lobby'} />
+        {(features.chat || features.voice) && <ChatDock messages={chat} voice={voice} snapshot={voiceState} raised={phase === 'lobby'} />}
         {/* Room to scroll the page clear of the chat dock. */}
         {!ctx.state.solo && <div aria-hidden="true" className="h-16" />}
         <SoundBlockedBanner />

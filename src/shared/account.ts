@@ -7,6 +7,8 @@ export interface Me {
   name: string
   email: string
   picture: string | null
+  /** Allowed into the admin console. */
+  admin?: boolean
 }
 
 export interface AuthConfig {

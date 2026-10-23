@@ -1,5 +1,6 @@
 // Google sign-in (OAuth 2.0 authorization-code flow with PKCE) and cookie sessions.
 import { DevLoginSchema, type AuthConfig, type Me } from '../shared/account'
+import { BRAND } from '../shared/brand'
 import { json } from './http'
 
 const SESSION_COOKIE = 'encore_session'
@@ -15,6 +16,7 @@ export interface SessionUser {
   name: string
   email: string
   picture: string | null
+  google_sub: string
 }
 
 // ---------------------------------------------------------------------------
@@ -64,6 +66,25 @@ function devLoginAllowed(env: Env, url: URL): boolean {
   return env.DEV_LOGIN === 'true' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
 }
 
+/** Google accounts allowed into the admin console: ADMIN_EMAILS (comma-separated), or the site owner's. */
+export function adminEmails(env: Env): string[] {
+  const raw = (env as unknown as { ADMIN_EMAILS?: string }).ADMIN_EMAILS?.trim()
+  return (raw || BRAND.email)
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+/**
+ * Admins are recognised by their Google-verified email. Developer sign-ins (which
+ * anyone can type) only count on localhost, for testing the console.
+ */
+export function isAdmin(env: Env, url: URL, user: SessionUser | null): boolean {
+  if (!user) return false
+  if (user.google_sub.startsWith('dev:') && !devLoginAllowed(env, url)) return false
+  return adminEmails(env).includes(user.email.toLowerCase())
+}
+
 // ---------------------------------------------------------------------------
 // Sessions
 
@@ -71,8 +92,8 @@ export async function getSessionUser(request: Request, env: Env): Promise<Sessio
   const token = readCookie(request, SESSION_COOKIE)
   if (!token || token.length > 100) return null
   const row = await env.DB.prepare(
-    `SELECT u.id, u.name, u.email, u.picture FROM sessions s JOIN users u ON u.id = s.user_id
-     WHERE s.token_hash = ? AND s.expires_at > ?`,
+    `SELECT u.id, u.name, u.email, u.picture, u.google_sub FROM sessions s JOIN users u ON u.id = s.user_id
+     WHERE s.token_hash = ? AND s.expires_at > ? AND u.banned_at IS NULL AND u.deleted_at IS NULL`,
   )
     .bind(await sha256(token), Date.now())
     .first<SessionUser>()
@@ -94,16 +115,18 @@ async function createSession(env: Env, userId: string, url: URL): Promise<string
   return cookie(SESSION_COOKIE, token, url, SESSION_TTL_MS / 1000)
 }
 
-async function upsertUser(env: Env, sub: string, email: string, name: string, picture: string | null): Promise<string> {
+/** Creates or refreshes the account. Banned and deleted accounts come back as `blocked`. */
+async function upsertUser(env: Env, sub: string, email: string, name: string, picture: string | null): Promise<{ id: string; blocked: boolean }> {
   const now = Date.now()
   const row = await env.DB.prepare(
-    `INSERT INTO users (id, google_sub, email, name, picture, created_at, last_login) VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (google_sub) DO UPDATE SET email = excluded.email, name = excluded.name, picture = excluded.picture, last_login = excluded.last_login
-     RETURNING id`,
+    `INSERT INTO users (id, google_sub, email, name, picture, created_at, last_login, login_count) VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+     ON CONFLICT (google_sub) DO UPDATE SET email = excluded.email, name = excluded.name, picture = excluded.picture, last_login = excluded.last_login,
+       login_count = login_count + 1
+     RETURNING id, banned_at, deleted_at`,
   )
     .bind(crypto.randomUUID(), sub, email.toLowerCase(), name.slice(0, 60), picture, now, now)
-    .first<{ id: string }>()
-  return row!.id
+    .first<{ id: string; banned_at: number | null; deleted_at: number | null }>()
+  return { id: row!.id, blocked: row!.banned_at !== null || row!.deleted_at !== null }
 }
 
 export function redirect(location: string, cookies: string[] = []): Response {
@@ -124,7 +147,8 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
 
   if (path === '/api/me' && request.method === 'GET') {
     const user = await getSessionUser(request, env)
-    return json({ user: user satisfies Me | null })
+    const me: Me | null = user ? { id: user.id, name: user.name, email: user.email, picture: user.picture, ...(isAdmin(env, url, user) ? { admin: true } : {}) } : null
+    return json({ user: me })
   }
 
   if (path === '/api/auth/google/start' && request.method === 'GET') {
@@ -177,8 +201,9 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     if (!info.sub || !info.email || info.email_verified === false) return fail('email')
 
     const picture = info.picture && PICTURE_RE.test(info.picture) ? info.picture : null
-    const userId = await upsertUser(env, info.sub, info.email, info.name || info.email.split('@')[0]!, picture)
-    return redirect(safeReturnTo(saved[2]!), [await createSession(env, userId, url), cookie(OAUTH_COOKIE, '', url, 0)])
+    const account = await upsertUser(env, info.sub, info.email, info.name || info.email.split('@')[0]!, picture)
+    if (account.blocked) return fail('blocked')
+    return redirect(safeReturnTo(saved[2]!), [await createSession(env, account.id, url), cookie(OAUTH_COOKIE, '', url, 0)])
   }
 
   if (path === '/api/auth/logout' && request.method === 'POST') {
@@ -193,9 +218,10 @@ export async function handleAuth(request: Request, env: Env, url: URL): Promise<
     if (!devLoginAllowed(env, url)) return json({ error: 'Not found' }, 404)
     const body = DevLoginSchema.safeParse(await request.json().catch(() => null))
     if (!body.success) return json({ error: 'Invalid body' }, 400)
-    const userId = await upsertUser(env, `dev:${body.data.email}`, body.data.email, body.data.name, null)
+    const account = await upsertUser(env, `dev:${body.data.email}`, body.data.email, body.data.name, null)
+    if (account.blocked) return json({ error: 'This account has been suspended.' }, 403)
     const res = json({ ok: true })
-    res.headers.append('Set-Cookie', await createSession(env, userId, url))
+    res.headers.append('Set-Cookie', await createSession(env, account.id, url))
     return res
   }
 

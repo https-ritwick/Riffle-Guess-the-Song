@@ -14,6 +14,7 @@ import { useAuth } from '../lib/auth'
 import { FEATURED_WITH_COVERS } from '../lib/covers'
 import { useMyGroups } from '../lib/groups'
 import { useProgress } from '../lib/progress'
+import { useSite } from '../lib/site'
 import { GAME_MODES } from '../lib/source'
 import { fetchRoomInfo } from '../lib/useRoom'
 import { BRAND } from '../../shared/brand'
@@ -23,6 +24,7 @@ const LOGIN_ERRORS: Record<string, string> = {
   state: 'Your sign-in expired. Please try again.',
   not_configured: 'Google sign-in is not set up on this server yet.',
   email: 'Your Google account email must be verified.',
+  blocked: 'This account has been suspended. Mail us if you think this is a mistake.',
 }
 
 function MyGroups() {
@@ -124,6 +126,7 @@ export function Home() {
   const navigate = useNavigate()
   const toast = useToast()
   const { me, loading: authLoading } = useAuth()
+  const { features } = useSite()
   const progress = useProgress()
   const [params, setParams] = useSearchParams()
   const [step, setStep] = useState<'menu' | 'join'>(params.has('join') ? 'join' : 'menu')
@@ -298,7 +301,7 @@ export function Home() {
         </div>
 
         <div className={clsx('grid gap-6', progress.games > 0 && 'lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]')}>
-          <DailyCard highlight={params.has('daily')} />
+          {features.daily && <DailyCard highlight={params.has('daily')} />}
           <CareerCard />
         </div>
 

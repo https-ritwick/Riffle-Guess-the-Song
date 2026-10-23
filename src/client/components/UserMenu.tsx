@@ -1,9 +1,10 @@
 import clsx from 'clsx'
-import { ChevronDown, Loader2, LogIn, LogOut, Unlink, Users } from 'lucide-react'
+import { ChevronDown, Loader2, LogIn, LogOut, ShieldCheck, Unlink, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { BRAND } from '../../shared/brand'
 import { useAuth } from '../lib/auth'
+import { trackEvent } from '../lib/track'
 import { connectSpotify, disconnectSpotify, useSpotify } from '../lib/spotify'
 import { SpotifyIcon } from './SpotifyIcon'
 import { useToast } from './Toasts'
@@ -36,12 +37,27 @@ export function SignInButton({ returnTo, className, label = 'Continue with Googl
     <>
       <button
         type="button"
-        onClick={() => (config.google ? signIn(returnTo) : setDevOpen(true))}
+        onClick={() => {
+          trackEvent('sign_in_click')
+          if (config.google) signIn(returnTo)
+          else setDevOpen(true)
+        }}
         className={clsx('flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 text-[15px] font-semibold text-gray-900 hover:bg-gray-100', className)}
       >
         <GoogleIcon className="h-5 w-5" />
         {config.google ? label : 'Developer sign-in (local)'}
       </button>
+      <p className="mt-2 text-center text-[11px] text-gray-500">
+        By continuing you agree to the{' '}
+        <Link to="/terms" className="underline-offset-2 hover:text-gray-300 hover:underline">
+          Terms
+        </Link>{' '}
+        and{' '}
+        <Link to="/privacy" className="underline-offset-2 hover:text-gray-300 hover:underline">
+          Privacy Policy
+        </Link>
+        .
+      </p>
       {devOpen && <DevLoginDialog onClose={() => setDevOpen(false)} />}
     </>
   )
@@ -150,6 +166,11 @@ export function UserMenu() {
           <Link role="menuitem" to="/groups" onClick={() => setOpen(false)} className="flex items-center gap-2 px-4 py-2.5 text-sm text-gray-200 hover:bg-gray-800">
             <Users className="h-4 w-4" /> My groups
           </Link>
+          {me.admin && (
+            <Link role="menuitem" to="/admin" onClick={() => setOpen(false)} className="flex items-center gap-2 px-4 py-2.5 text-sm text-brand-200 hover:bg-gray-800" data-testid="admin-link">
+              <ShieldCheck className="h-4 w-4" /> Admin console
+            </Link>
+          )}
           <button
             type="button"
             role="menuitem"

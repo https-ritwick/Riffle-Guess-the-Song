@@ -25,5 +25,7 @@
     { "name": "CREATE_LIMITER", "namespace_id": "4101", "simple": { "limit": 20, "period": 60 } },
     { "name": "CONNECT_LIMITER", "namespace_id": "4102", "simple": { "limit": 60, "period": 60 } }
   ],
+  // Daily clean-up of old analytics rows and expired sessions (03:00 IST).
+  "triggers": { "crons": ["30 21 * * *"] },
   "observability": { "enabled": true }
 }

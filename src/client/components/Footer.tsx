@@ -1,4 +1,5 @@
 import { Mail } from 'lucide-react'
+import { Link } from 'react-router'
 import { BRAND } from '../../shared/brand'
 
 function GitHubIcon({ className }: { className?: string }) {
@@ -46,6 +47,18 @@ export function Footer() {
           </a>
         </nav>
       </div>
+      <nav aria-label="Legal" className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-gray-500 sm:justify-start">
+        <span>© {new Date().getFullYear()} {BRAND.name}</span>
+        <Link to="/terms" className="hover:text-gray-200">
+          Terms
+        </Link>
+        <Link to="/privacy" className="hover:text-gray-200">
+          Privacy
+        </Link>
+        <Link to="/privacy#analytics" className="hover:text-gray-200">
+          Cookie-free analytics
+        </Link>
+      </nav>
     </footer>
   )
 }

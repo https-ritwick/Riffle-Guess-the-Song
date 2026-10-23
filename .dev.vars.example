@@ -1,6 +1,9 @@
 # Copy to .dev.vars for local development.
 # Enables the "developer sign-in" button on http://localhost only (for testing groups without Google).
 DEV_LOGIN=true
+# Admin console (/admin): Google accounts allowed in, comma-separated. Defaults to the site owner's email.
+# Locally, a developer sign-in with one of these emails also gets in.
+ADMIN_EMAILS=
 # Optional: real Google sign-in locally. Add http://localhost:5290/api/auth/google/callback
 # as an authorised redirect URI in your Google OAuth client.
 GOOGLE_CLIENT_ID=

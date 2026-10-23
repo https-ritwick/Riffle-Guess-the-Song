@@ -3,6 +3,7 @@ import { Check, Copy, Download, Link2, Loader2, Share2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BRAND } from '../../../shared/brand'
 import { useToast } from '../../components/Toasts'
+import { trackEvent } from '../../lib/track'
 
 // Result sharing: a story-sized poster (Instagram Story / WhatsApp Status), a square
 // post, WhatsApp and X links, copyable text and a "beat my score" challenge link.
@@ -256,6 +257,7 @@ export function ShareSheet({ data, onClose }: { data: ShareData; onClose: () => 
 
   /** Hand the poster to the phone's share sheet (Instagram, WhatsApp…), or save it. */
   const shareImage = async (where: string, want: Format) => {
+    trackEvent(want === 'story' ? 'story_poster' : 'share_result')
     const img = images[want] ?? { blob: await drawCard(data, want), url: '' }
     const file = new File([img.blob], `riffle-${want}.png`, { type: 'image/png' })
     try {
@@ -272,6 +274,7 @@ export function ShareSheet({ data, onClose }: { data: ShareData; onClose: () => 
   }
 
   const copy = async (what: 'text' | 'link') => {
+    trackEvent(what === 'link' ? 'challenge_link' : 'share_result')
     try {
       await navigator.clipboard.writeText(what === 'text' ? text : data.challengeUrl)
       setCopied(what)
