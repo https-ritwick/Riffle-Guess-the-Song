@@ -163,6 +163,7 @@ export interface GamesReport {
   avgAccuracy: number
   avgMinutes: number
   social: { chatGames: number; voiceGames: number; reactionGames: number; total: number }
+  party: { teams: number; powerUps: number; tv: number; quizzes: number }
   hours: number[][]
   features: Ranked[]
 }
@@ -332,6 +333,12 @@ export const GroupActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('invite'), enabled: z.boolean() }),
   z.object({ action: z.literal('guests'), enabled: z.boolean() }),
   z.object({ action: z.literal('remove'), userId: z.string().min(1).max(60) }),
+  z.object({ action: z.literal('delete') }),
+])
+
+export const QuizActionSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('remove'), reason: z.string().trim().max(200).default('') }),
+  z.object({ action: z.literal('restore') }),
   z.object({ action: z.literal('delete') }),
 ])
 

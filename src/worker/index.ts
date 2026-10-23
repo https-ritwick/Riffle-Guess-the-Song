@@ -8,6 +8,7 @@ import { handleGroups, isGroupMember } from './groups'
 import { json } from './http'
 import { getPlaylist, PlaylistError, PlaylistQuerySchema } from './playlist'
 import { allocateRoom, roomStub } from './rooms'
+import { handleQuizzes, quizSource } from './quizzes'
 import { handleSpotify } from './spotify'
 
 export { GameRoom } from './room'
@@ -41,14 +42,17 @@ async function handleRooms(request: Request, env: Env, url: URL): Promise<Respon
     const config = await siteConfig(env)
     // Maintenance pauses new rooms for everyone but admins.
     if (config.maintenance.enabled && !isAdmin(env, url, user)) return json({ error: config.maintenance.message || 'New games are paused for maintenance.' }, 503)
-    const body = (await request.json().catch(() => null)) as { solo?: unknown; daily?: unknown; game?: unknown } | null
+    const body = (await request.json().catch(() => null)) as { solo?: unknown; daily?: unknown; game?: unknown; quiz?: unknown } | null
     if (body?.daily === true && !config.features.daily) return json({ error: 'The daily challenge is taking a break today.' }, 503)
-    // A preset game (from a "beat my score" link) or today's daily challenge.
+    // A player-made quiz, a preset game (from a "beat my score" link) or today's daily challenge.
+    const quiz = typeof body?.quiz === 'string' ? await quizSource(env, body.quiz) : null
+    if (body?.quiz !== undefined && !quiz) return json({ error: 'That quiz doesn’t exist or was taken down.' }, 404)
     const game = GameKindSchema.safeParse(body?.game)
     const code = await allocateRoom(env, {
       solo: body?.solo === true,
       ...(body?.daily === true ? { daily: dailyNumber() } : {}),
       ...(game.success ? { settings: { ...DEFAULT_SETTINGS, game: game.data } } : {}),
+      ...(quiz ? { settings: { ...DEFAULT_SETTINGS, source: quiz } } : {}),
     })
     if (code) await logRoom(env, code, body?.daily === true ? 'daily' : body?.solo === true ? 'solo' : 'party', request, user)
     return code ? json({ code }, 201) : json({ error: 'Could not allocate a room code. Please try again.' }, 503)
@@ -200,6 +204,7 @@ export default {
         (await handleSpotify(request, env, url, clientKey(request))) ??
         (await handleAuth(request, env, url)) ??
         (await handleAdmin(request, env, url, await getSessionUser(request, env))) ??
+        (await handleQuizzes(request, env, url, await getSessionUser(request, env))) ??
         (await handleGroups(request, env, url, await getSessionUser(request, env)))
       return response ?? json({ error: 'Not found' }, 404)
     } catch (err) {

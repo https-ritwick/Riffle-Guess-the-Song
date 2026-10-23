@@ -1,6 +1,6 @@
 // The admin console: a separate, lazily-loaded app under /admin for the site owner.
 import clsx from 'clsx'
-import { Activity, ArrowLeft, BarChart3, CalendarDays, Gamepad2, History, LayoutDashboard, Settings, ShieldCheck, Users, UsersRound } from 'lucide-react'
+import { Activity, ArrowLeft, BarChart3, CalendarDays, Gamepad2, History, LayoutDashboard, Puzzle, Settings, ShieldCheck, Users, UsersRound } from 'lucide-react'
 import { useEffect } from 'react'
 import { NavLink, Route, Routes, useLocation } from 'react-router'
 import { Card, LogoMark, Spinner, UserPhoto } from '../components/ui'
@@ -11,6 +11,7 @@ import { AuditPage } from './Audit'
 import { DailyPage } from './Daily'
 import { GroupDetailPage, GroupsPage } from './Groups'
 import { OverviewPage } from './Overview'
+import { QuizzesAdminPage } from './Quizzes'
 import { RoomsPage } from './Rooms'
 import { SettingsPage } from './Settings'
 import { UserDetailPage, UsersPage } from './Users'
@@ -20,6 +21,7 @@ const NAV = [
   { to: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/admin/users', label: 'Users', icon: Users },
   { to: '/admin/groups', label: 'Groups', icon: UsersRound },
+  { to: '/admin/quizzes', label: 'Quizzes', icon: Puzzle },
   { to: '/admin/rooms', label: 'Live rooms', icon: Gamepad2 },
   { to: '/admin/daily', label: 'Daily challenge', icon: CalendarDays },
   { to: '/admin/settings', label: 'Site settings', icon: Settings },
@@ -130,6 +132,7 @@ export default function AdminApp() {
               <Route path="users/:id" element={<UserDetailPage />} />
               <Route path="groups" element={<GroupsPage />} />
               <Route path="groups/:id" element={<GroupDetailPage />} />
+              <Route path="quizzes" element={<QuizzesAdminPage />} />
               <Route path="rooms" element={<RoomsPage />} />
               <Route path="daily" element={<DailyPage />} />
               <Route path="settings" element={<SettingsPage />} />

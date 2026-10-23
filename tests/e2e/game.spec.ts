@@ -4,7 +4,7 @@ import { createRoom, joinAs, newPlayer, playerNames, skipRecap } from './helpers
 async function chooseOption(page: Page, predicate: (text: string) => boolean) {
   const choices = page.getByTestId('choices').locator('button')
   await expect(choices.first()).toBeEnabled()
-  const texts = (await choices.allTextContents()).map((t) => t.replace(/^\d/, '').trim())
+  const texts = (await choices.allTextContents()).map((t) => t.replace(/^[A-D]/, '').trim())
   const index = texts.findIndex(predicate)
   expect(index, `options were ${texts.join(' | ')}`).toBeGreaterThanOrEqual(0)
   await choices.nth(index).click()

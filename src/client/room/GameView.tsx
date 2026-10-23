@@ -1,9 +1,10 @@
 import clsx from 'clsx'
-import { ArrowRight, ExternalLink, Flag, Lock, Sparkles, Volume2, VolumeX, Zap } from 'lucide-react'
+import { ArrowRight, ExternalLink, Flag, Lock, Sparkles, Tv, Volume2, VolumeX, Zap } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CHALLENGE_QUESTION } from '../../shared/challenges'
 import type { PublicPlayer, PublicRound, QuestionMode } from '../../shared/protocol'
 import { MAX_STREAK_BONUS, REVEAL_MS, STREAK_BONUS } from '../../shared/rules'
+import { POWER_IDS, POWERS, TEAMS, type PowerId } from '../../shared/modes'
 import { PlayerAvatar } from '../components/ui'
 import { player as audio, usePlayer } from '../lib/audio'
 import { findSongClip } from '../lib/itunes'
@@ -13,7 +14,8 @@ import { difficultyLabel } from '../lib/source'
 import { useNow } from '../lib/useNow'
 import { useRoomContext } from './context'
 import { ReactionBar } from './Reactions'
-import { AnimatedNumber, Scoreboard } from './Scoreboard'
+import { AnimatedNumber, rankPlayers, Scoreboard } from './Scoreboard'
+import { TeamStandings } from './Teams'
 
 /** Dialogue, star and emoji rounds have no clip while you answer. */
 export function isChallengeMode(mode: QuestionMode): boolean {
@@ -24,7 +26,7 @@ export function isChallengeMode(mode: QuestionMode): boolean {
  * An emoji round's song once you're allowed to hear it (you cracked it, or it's
  * revealed): from the server when it could fetch it, else looked up by this browser.
  */
-function useEmojiSong(round: PublicRound | null): SongClip | null {
+export function useEmojiSong(round: PublicRound | null): SongClip | null {
   const find = round?.reveal?.find ?? round?.yourResult?.find ?? null
   const key = find ? `${find.title}|${find.movie}` : ''
   const [clip, setClip] = useState<{ key: string; clip: SongClip | null } | null>(null)
@@ -45,13 +47,17 @@ function useEmojiSong(round: PublicRound | null): SongClip | null {
  * through the reveal, and the next song is downloaded meanwhile so it starts the
  * moment the reveal's countdown ends.
  */
-function useRoundAudio(round: PublicRound | null, phase: string, serverNow: () => number, looked: SongClip | null) {
+export function useRoundAudio(round: PublicRound | null, phase: string, serverNow: () => number, looked: SongClip | null, muted = false) {
   const revealSong = round && isChallengeMode(round.mode) ? round.reveal?.track.preview || (round.reveal ? (looked?.preview ?? '') : '') : ''
   // Crack an emoji puzzle and its song starts right away, while the others are still thinking.
   const earnedSong = round?.yourResult?.song || (round?.yourResult?.correct ? (looked?.preview ?? '') : '')
-  const key = round ? `${round.index}:${round.preview}:${revealSong}:${earnedSong}` : ''
+  const key = round ? `${round.index}:${round.preview}:${revealSong}:${earnedSong}:${muted}` : ''
   useEffect(() => {
     if (!round) return
+    if (muted) {
+      audio.stop()
+      return
+    }
     if (isChallengeMode(round.mode)) {
       const song = phase === 'reveal' ? revealSong || earnedSong : phase === 'question' ? earnedSong : ''
       if (song) audio.ensurePlaying(song, 0)
@@ -113,7 +119,7 @@ function useRoundMarks(round: PublicRound, you: string) {
   return marks.current
 }
 
-function Equalizer({ active, className }: { active: boolean; className?: string }) {
+export function Equalizer({ active, className }: { active: boolean; className?: string }) {
   return (
     <span className={clsx('inline-flex h-4 items-end gap-0.5', className)} aria-hidden="true">
       {[0, 1, 2, 3].map((i) => (
@@ -127,7 +133,7 @@ function Equalizer({ active, className }: { active: boolean; className?: string 
   )
 }
 
-function TimerRing({ progress, seconds, urgent }: { progress: number; seconds: number; urgent: boolean }) {
+export function TimerRing({ progress, seconds, urgent }: { progress: number; seconds: number; urgent: boolean }) {
   const r = 22
   const c = 2 * Math.PI * r
   return (
@@ -188,7 +194,7 @@ function NextUp({ endsAt, now, last, double, noun }: { endsAt: number | null; no
  * The record and its sleeve. While you guess, the record spins out of a blank
  * sleeve; at the reveal the sleeve flips to the real album art.
  */
-function VinylStage({ round, spinning }: { round: PublicRound; spinning: boolean }) {
+export function VinylStage({ round, spinning }: { round: PublicRound; spinning: boolean }) {
   const { state } = useRoomContext()
   const track = round.reveal?.track
   const flipped = !!track
@@ -297,7 +303,7 @@ function visibleClues(round: PublicRound, now: number): number {
 }
 
 /** The challenge to solve (a dialogue, emojis or clues), turning into the answer at the reveal. */
-function ChallengeStage({ round, now }: { round: PublicRound; now: number }) {
+export function ChallengeStage({ round, now }: { round: PublicRound; now: number }) {
   const c = round.challenge
   const answer = round.reveal?.track
   const shown = visibleClues(round, now)
@@ -370,25 +376,36 @@ function ChallengeStage({ round, now }: { round: PublicRound; now: number }) {
   )
 }
 
-const OPTION_TINTS = ['from-amber-500/30', 'from-fuchsia-500/30', 'from-pink-500/30', 'from-amber-500/30']
+/** Each option has a colour and letter, the same on phones and on the TV. */
+export const OPTION_STYLES = [
+  { letter: 'A', badge: 'bg-amber-400 text-black', tint: 'from-amber-500/30', buzz: 'from-amber-500/25' },
+  { letter: 'B', badge: 'bg-fuchsia-400 text-black', tint: 'from-fuchsia-500/30', buzz: 'from-fuchsia-500/25' },
+  { letter: 'C', badge: 'bg-sky-400 text-black', tint: 'from-sky-500/30', buzz: 'from-sky-500/25' },
+  { letter: 'D', badge: 'bg-emerald-400 text-black', tint: 'from-emerald-500/30', buzz: 'from-emerald-500/25' },
+] as const
 
-function Choices({ round, players, onAnswer, locked }: { round: PublicRound; players: PublicPlayer[]; onAnswer: (i: number) => void; locked: boolean }) {
+function Choices({ round, players, onAnswer, locked, buzzer }: { round: PublicRound; players: PublicPlayer[]; onAnswer: (i: number) => void; locked: boolean; buzzer: boolean }) {
   const reveal = round.reveal
   const correctIndex = reveal?.correct ?? round.yourResult?.correctIndex
   const pickers = (i: number) => (reveal ? players.filter((p) => reveal.picks[p.id]?.choice === i) : [])
+  const removed = round.removed ?? []
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="choices">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-3" data-testid="choices">
       {[0, 1, 2, 3].map((i) => {
         const text = round.options?.[i]
         const art = round.optionArt?.[i]
+        const style = OPTION_STYLES[i]!
         const mine = round.yourChoice === i
         const known = correctIndex !== undefined
+        const gone = removed.includes(i) && !known
         let tone = 'border-white/10 bg-white/[0.04]'
         if (known) {
           if (i === correctIndex) tone = 'border-emerald-300/80 bg-emerald-500/20 shadow-[0_0_30px_-6px] shadow-emerald-400/50'
           else if (mine) tone = 'border-red-400/80 bg-red-500/20'
           else tone = 'border-white/5 bg-white/[0.02] opacity-45'
+        } else if (gone) {
+          tone = 'border-white/5 bg-white/[0.01] opacity-25'
         } else if (round.yourChoice !== null) {
           tone = mine ? 'border-brand-400 bg-brand-500/15 ring-2 ring-brand-400/40' : 'border-white/5 bg-white/[0.02] opacity-45'
         }
@@ -396,28 +413,34 @@ function Choices({ round, players, onAnswer, locked }: { round: PublicRound; pla
           <button
             key={i}
             type="button"
-            disabled={!text || locked}
+            disabled={!text || locked || gone}
             onClick={() => onAnswer(i)}
             data-choice={i}
+            aria-label={text ? `${style.letter}: ${text}${gone ? ' (removed)' : ''}` : undefined}
             className={clsx(
-              'group relative flex min-h-20 items-center gap-3 overflow-hidden rounded-2xl border p-2.5 pr-4 text-left transition-all duration-200',
+              'group relative flex overflow-hidden rounded-2xl border text-left transition-all duration-200',
+              // Phones: tall 2×2 buzzers. Wider screens: a row with the cover.
+              'min-h-[5.5rem] flex-col justify-between gap-2 bg-linear-to-br to-transparent p-2.5 sm:min-h-20 sm:flex-row sm:items-center sm:justify-start sm:gap-3 sm:bg-none sm:p-2.5 sm:pr-4',
+              buzzer && 'min-h-[7.5rem] sm:min-h-24',
+              !known && !gone && round.yourChoice === null && style.buzz,
               tone,
-              text && !locked && 'hover:-translate-y-0.5 hover:border-brand-400/70 hover:bg-white/[0.08] hover:shadow-xl active:scale-[0.98]',
+              text && !locked && !gone && 'hover:-translate-y-0.5 hover:border-brand-400/70 hover:bg-white/[0.08] hover:shadow-xl active:scale-[0.97]',
               known && i === correctIndex && 'animate-pop',
             )}
           >
-            <span className={clsx('relative h-15 w-15 shrink-0 overflow-hidden rounded-xl bg-linear-to-br to-gray-900 ring-1 ring-white/10', OPTION_TINTS[i])} aria-hidden="true">
-              {art ? <img src={art} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full w-full items-center justify-center text-xl font-black text-white/70">{i + 1}</span>}
-              {art && <span className="absolute top-1 left-1 rounded-md bg-black/70 px-1.5 text-[11px] font-bold text-white">{i + 1}</span>}
+            {/* One letter per option (it matches the TV), then the cover when every option has one. */}
+            <span className="flex items-center gap-2 sm:contents" aria-hidden="true">
+              <span className={clsx('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm font-black sm:h-9 sm:w-9 sm:text-base', style.badge)}>{style.letter}</span>
+              {art && <img src={art} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover ring-1 ring-white/10 sm:h-15 sm:w-15 sm:rounded-xl" />}
             </span>
             {text ? (
-              <span className="min-w-0 flex-1 font-semibold leading-snug break-words text-white">{text}</span>
+              <span className={clsx('min-w-0 font-semibold leading-snug break-words text-white sm:flex-1', gone && 'line-through', buzzer ? 'text-base sm:text-lg' : 'text-[15px] sm:text-base', 'line-clamp-3')}>{text}</span>
             ) : (
               <span className="h-4 w-3/4 animate-pulse rounded bg-white/10" />
             )}
             {pickers(i).length > 0 && (
-              <span className="absolute right-2 bottom-2 flex -space-x-1.5">
-                {pickers(i).map((p) => (
+              <span className="absolute top-1.5 right-1.5 flex -space-x-1.5 sm:top-auto sm:right-2 sm:bottom-2">
+                {pickers(i).slice(0, 5).map((p) => (
                   <span key={p.id} title={p.name}>
                     <PlayerAvatar avatar={p.avatar} photo={p.photo} name={p.name} size="sm" />
                   </span>
@@ -431,6 +454,74 @@ function Choices({ round, players, onAnswer, locked }: { round: PublicRound; pla
   )
 }
 
+/** Power-ups: one 50-50, Double and Shield each per game, used before answering. */
+function PowerBar({ round, powers, phase, onUse }: { round: PublicRound; powers: PowerId[]; phase: string; onUse: (p: PowerId) => void }) {
+  const open = phase === 'question' && round.yourChoice === null && !round.yourPower
+  return (
+    <div className="flex items-center gap-1.5 sm:gap-2" role="group" aria-label="Power-ups" data-testid="power-bar">
+      {POWER_IDS.map((id) => {
+        const has = powers.includes(id)
+        const active = round.yourPower === id
+        return (
+          <button
+            key={id}
+            type="button"
+            disabled={!open || !has}
+            onClick={() => onUse(id)}
+            title={POWERS[id].hint}
+            aria-pressed={active}
+            data-testid={`power-${id}`}
+            className={clsx(
+              'flex min-w-0 flex-1 items-center justify-center gap-1 rounded-xl px-2 py-2 text-xs font-bold ring-1 transition sm:text-sm',
+              active ? 'bg-brand-400 text-black ring-brand-300' : has ? 'bg-white/[0.06] text-white ring-white/10 enabled:hover:bg-white/[0.12] disabled:opacity-60' : 'bg-transparent text-gray-600 line-through ring-white/5',
+            )}
+          >
+            <span aria-hidden="true">{POWERS[id].emoji}</span> <span className="truncate">{POWERS[id].name}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Antakshari's letter (and whose turn it is in a team battle). */
+function AntakshariBanner({ round, phase, myTeam }: { round: PublicRound; phase: string; myTeam: string | null }) {
+  const turn = round.turn ? TEAMS[round.turn] : null
+  const other = round.turn ? TEAMS[round.turn === 'a' ? 'b' : 'a'] : null
+  const reveal = phase === 'reveal'
+  const letter = reveal ? round.nextLetter : round.letter
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2 sm:mb-4" data-testid="antakshari-banner">
+      <span className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500/15 px-3 py-1.5 text-sm font-bold text-emerald-100 ring-1 ring-emerald-400/30">
+        🎤{' '}
+        {reveal ? (
+          letter ? (
+            <>
+              Next song starts with <span className="rounded-lg bg-emerald-400 px-2 font-black text-black uppercase">{letter}</span>
+            </>
+          ) : round.index + 1 < round.total ? (
+            'Next: a fresh start'
+          ) : (
+            'Last song!'
+          )
+        ) : letter ? (
+          <>
+            Starts with <span className="rounded-lg bg-emerald-400 px-2 text-lg font-black text-black uppercase" data-testid="antakshari-letter">{letter}</span>
+          </>
+        ) : (
+          'Fresh start — any letter'
+        )}
+      </span>
+      {turn && other && !reveal && (
+        <span className={clsx('inline-flex items-center gap-1.5 rounded-2xl px-3 py-1.5 text-sm font-bold ring-1 ring-white/10', turn.bg, turn.text)} data-testid="turn-banner">
+          {turn.emoji} {turn.name}’s turn
+          <span className="font-normal text-gray-300">{myTeam && myTeam !== round.turn ? '· you can steal for ½ points' : `· ${other.name} can steal`}</span>
+        </span>
+      )}
+    </div>
+  )
+}
+
 function Status({ phase, round, you, answeredCount, activeCount, solo }: { phase: string; round: PublicRound; you: string; answeredCount: number; activeCount: number; solo: boolean }) {
   const question = round.challenge ? CHALLENGE_QUESTION[round.challenge.kind] : round.mode === 'title' ? 'What’s the song?' : round.mode === 'artist' ? 'Who’s the artist?' : 'Ready?'
   const waiting = solo ? null : (
@@ -439,6 +530,7 @@ function Status({ phase, round, you, answeredCount, activeCount, solo }: { phase
     </span>
   )
   if (phase === 'countdown') return <p className="text-lg font-bold text-white">Get ready…</p>
+  const power = round.yourPower ? <span className="ml-2 inline-flex rounded-full bg-brand-400/15 px-2 py-0.5 align-middle text-xs font-extrabold text-brand-200">{POWERS[round.yourPower].emoji} {POWERS[round.yourPower].name}</span> : null
   if (phase === 'question') {
     if (round.yourResult) {
       return round.yourResult.correct ? (
@@ -456,8 +548,11 @@ function Status({ phase, round, you, answeredCount, activeCount, solo }: { phase
       )
     }
     return (
-      <p className="flex flex-col gap-1 text-xl font-extrabold text-white">
-        <span>{question}</span>
+      <p className="flex flex-col gap-1 text-lg font-extrabold text-white sm:text-xl">
+        <span>
+          {question}
+          {power}
+        </span>
         {round.yourChoice !== null && !solo && (
           <span className="text-sm font-normal text-gray-400">
             Answer locked in — waiting for others ({answeredCount}/{activeCount})
@@ -583,6 +678,25 @@ function SoloPanel({ me, marks, round, onNext, phase }: { me: PublicPlayer | und
   )
 }
 
+/** A TV is showing the game: the music plays there and this phone is a buzzer. */
+function TvHint({ soundHere, onToggle }: { soundHere: boolean; onToggle: () => void }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl bg-sky-500/10 px-3 py-2.5 ring-1 ring-sky-400/20" data-testid="tv-hint">
+      <Tv className="h-5 w-5 shrink-0 text-sky-300" />
+      <p className="min-w-0 flex-1 text-sm text-sky-100">Watch the TV — the music plays there. Tap your answer here.</p>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-pressed={soundHere}
+        aria-label={soundHere ? 'Mute this phone' : 'Also play the music on this phone'}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+      >
+        {soundHere ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+      </button>
+    </div>
+  )
+}
+
 export function GameView() {
   const { state, you, isHost, send, serverNow, me } = useRoomContext()
   const round = state.round!
@@ -591,9 +705,12 @@ export function GameView() {
   const { playing } = usePlayer()
   const [pending, setPending] = useState<{ round: number; choice: number } | null>(null)
   const marks = useRoundMarks(round, you)
+  // With a TV connected, phones are buzzers: the music plays on the TV unless you want it here too.
+  const tv = state.displays > 0
+  const [soundHere, setSoundHere] = useState(false)
 
   const looked = useEmojiSong(round)
-  useRoundAudio(round, phase, serverNow, looked)
+  useRoundAudio(round, phase, serverNow, looked, tv && !soundHere)
   // Show the looked-up cover and link at the reveal too.
   const shownRound = useMemo<PublicRound>(
     () => (looked && round.reveal && !round.reveal.track.preview ? { ...round, reveal: { ...round.reveal, track: { ...round.reveal.track, artwork: looked.artwork, link: looked.link, preview: looked.preview } } } : round),
@@ -612,18 +729,24 @@ export function GameView() {
   const locked = phase !== 'question' || localRound.yourChoice !== null || round.endsAt <= now
 
   const answer = (choice: number) => {
-    if (locked) return
+    if (locked || round.removed?.includes(choice)) return
     audio.unlock()
     playSfx('pop')
+    vibrate(15)
     setPending({ round: round.index, choice })
     send({ t: 'answer', round: round.index, choice })
   }
   const next = () => send({ t: 'next' })
+  const activatePower = (power: PowerId) => {
+    if (locked) return
+    playSfx('pop')
+    send({ t: 'power', round: round.index, power })
+  }
 
   // Keyboard shortcuts 1–4 (and Enter for the next song when solo).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
       const n = Number(e.key)
       if (n >= 1 && n <= 4) answer(n - 1)
       if (e.key === 'Enter' && state.solo && phase === 'reveal') next()
@@ -648,66 +771,82 @@ export function GameView() {
       ? { kind: myPick.correct ? ('right' as const) : ('wrong' as const), points: myPick.points }
       : null
   const doubleNext = state.settings.doubleFinal && round.total > 1 && round.index + 2 === round.total
+  const ranked = rankPlayers(state.players)
+  const myRank = ranked.findIndex((p) => p.id === you)
+  const antakshari = state.settings.game === 'songs' && state.settings.antakshari
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 pb-10">
+    <main className="mx-auto w-full max-w-6xl px-3 pb-28 sm:px-4 lg:pb-10">
       {state.notice && round.index === 0 && (
-        <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">{state.notice}</div>
+        <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 sm:mb-4">{state.notice}</div>
       )}
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div>
-          <div className="game-card relative overflow-hidden rounded-3xl border border-white/10 p-5 shadow-2xl sm:p-7">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-6">
+        <div className="min-w-0">
+          <div className="game-card relative overflow-hidden rounded-3xl border border-white/10 p-3.5 shadow-2xl sm:p-7">
             {shownRound.reveal?.track.artwork && <img src={shownRound.reveal.track.artwork} alt="" aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-20 blur-3xl" />}
             {phase === 'countdown' && <CountdownOverlay round={round} now={now} />}
             {outcome?.kind === 'right' && <StreakHype streak={me?.streak ?? 0} round={round.index} />}
 
             <div className="relative">
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="text-base text-gray-300">
+              <div className="mb-2.5 flex items-center justify-between gap-2 sm:mb-4">
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-3">
+                  <div className="text-sm text-gray-300 sm:text-base">
                     {challenge ? 'Question' : 'Song'}{' '}
                     <span className="font-extrabold text-white" data-testid="round-number">
                       {round.index + 1}
-                    </span>{' '}
-                    of {round.total}
+                    </span>
+                    /{round.total}
                   </div>
                   {round.double && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-2.5 py-1 text-xs font-extrabold text-amber-300">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-xs font-extrabold text-amber-300 sm:px-2.5 sm:py-1">
                       <Zap className="h-3.5 w-3.5" /> ×2
                     </span>
                   )}
-                  {(me?.streak ?? 0) >= 2 && <span className="rounded-full bg-orange-400/15 px-2.5 py-1 text-xs font-extrabold text-orange-300">🔥 {me!.streak} streak</span>}
+                  {(me?.streak ?? 0) >= 2 && <span className="rounded-full bg-orange-400/15 px-2 py-0.5 text-xs font-extrabold text-orange-300 sm:px-2.5 sm:py-1">🔥 {me!.streak}</span>}
                 </div>
-                <div className="text-base text-gray-300">
-                  Score{' '}
-                  <span className="text-xl font-extrabold text-brand-300 tabular-nums" data-testid="my-score">
+                <div className="flex shrink-0 items-center gap-2 text-sm text-gray-300 sm:text-base">
+                  {!state.solo && myRank >= 0 && (
+                    <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-xs font-bold text-gray-200" data-testid="my-rank">
+                      #{myRank + 1}/{ranked.length}
+                    </span>
+                  )}
+                  <span className="text-lg font-extrabold text-brand-300 tabular-nums sm:text-xl" data-testid="my-score">
                     <AnimatedNumber value={me?.score ?? 0} />
                   </span>
                 </div>
-                <div className="w-full">
-                  <RoundDots total={round.total} current={round.index} marks={marks} />
-                </div>
+              </div>
+              <div className="mb-3 sm:mb-5">
+                <RoundDots total={round.total} current={round.index} marks={marks} />
               </div>
 
-              <div className="mb-6 rounded-2xl border border-white/5 bg-black/20 p-4" aria-live="polite">
-                <div className="flex items-center gap-4">
+              {antakshari && <AntakshariBanner round={round} phase={phase} myTeam={me?.team ?? null} />}
+
+              <div className="mb-3 rounded-2xl border border-white/5 bg-black/20 p-2.5 sm:mb-6 sm:p-4" aria-live="polite">
+                <div className="flex items-center gap-3 sm:gap-4">
                   {phase === 'question' && <TimerRing progress={progress} seconds={secondsLeft} urgent={secondsLeft <= 3} />}
                   <div className="min-w-0 flex-1">
                     <Status phase={phase} round={localRound} you={you} answeredCount={answeredCount} activeCount={active.length} solo={state.solo} />
                   </div>
-                  {phase === 'question' && <Equalizer active={playing} className="h-6" />}
-                  {phase === 'reveal' && (
-                    <NextUp endsAt={state.phaseEndsAt} now={now} last={round.index + 1 >= round.total} double={doubleNext} noun={noun} />
-                  )}
+                  {phase === 'question' && <Equalizer active={playing} className="h-6 max-sm:hidden" />}
+                  {phase === 'reveal' && <NextUp endsAt={state.phaseEndsAt} now={now} last={round.index + 1 >= round.total} double={doubleNext} noun={noun} />}
                 </div>
               </div>
 
-              <div className={clsx('flex flex-col gap-5 sm:gap-7', !challenge && 'xl:flex-row')}>
-                <div className={challenge ? '' : 'xl:w-[40%]'}>
-                  {challenge ? <ChallengeStage round={shownRound} now={now} /> : <VinylStage round={round} spinning={playing && phase !== 'countdown'} />}
-                </div>
-                <div key={`${round.index}:${outcome?.kind ?? ''}`} className={clsx('relative flex-1', outcome?.kind === 'wrong' && 'animate-shake')}>
-                  <Choices round={localRound} players={state.players} onAnswer={answer} locked={locked} />
+              <div className={clsx('flex flex-col gap-3 sm:gap-6', !challenge && !tv && 'xl:flex-row')}>
+                {tv && !challenge && !round.reveal ? (
+                  <TvHint soundHere={soundHere} onToggle={() => setSoundHere((v) => !v)} />
+                ) : (
+                  <div className={challenge || tv ? '' : 'xl:w-[40%]'}>
+                    {challenge ? <ChallengeStage round={shownRound} now={now} /> : <VinylStage round={round} spinning={playing && phase !== 'countdown'} />}
+                  </div>
+                )}
+                <div key={`${round.index}:${outcome?.kind ?? ''}`} className={clsx('relative min-w-0 flex-1', outcome?.kind === 'wrong' && 'animate-shake')}>
+                  {state.settings.powerUps && me && (
+                    <div className="mb-2.5 sm:mb-3">
+                      <PowerBar round={localRound} powers={me.powers} phase={phase} onUse={activatePower} />
+                    </div>
+                  )}
+                  <Choices round={localRound} players={state.players} onAnswer={answer} locked={locked} buzzer={tv} />
                   {outcome?.kind === 'right' && (
                     <span aria-hidden="true" className="pointer-events-none absolute top-1/3 left-1/2 -translate-x-1/2 animate-float-up text-5xl font-black text-emerald-300 drop-shadow-[0_4px_20px_rgba(16,185,129,0.6)]">
                       +{outcome.points}
@@ -716,11 +855,11 @@ export function GameView() {
                 </div>
               </div>
 
-              {reacting && <ReactionBar className="mt-6 border-t border-white/5 pt-5" />}
+              {reacting && <ReactionBar className="mt-4 border-t border-white/5 pt-4 sm:mt-6 sm:pt-5" />}
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 sm:mt-3">
             <SfxToggle />
             {isHost && (
               <button
@@ -734,12 +873,9 @@ export function GameView() {
           </div>
         </div>
 
-        <aside className="lg:sticky lg:top-4 lg:self-start">
-          {state.solo ? (
-            <SoloPanel me={me} marks={marks} round={round} onNext={next} phase={phase} />
-          ) : (
-            <Scoreboard players={state.players} you={you} hostId={state.hostId} phase={phase} />
-          )}
+        <aside className="min-w-0 space-y-4 lg:sticky lg:top-4 lg:self-start">
+          {state.teams && <TeamStandings teams={state.teams} you={you} />}
+          {state.solo ? <SoloPanel me={me} marks={marks} round={round} onNext={next} phase={phase} /> : <Scoreboard players={state.players} you={you} hostId={state.hostId} phase={phase} />}
         </aside>
       </div>
     </main>

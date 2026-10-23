@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, ChevronDown, Crown } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Phase, PublicPlayer } from '../../shared/protocol'
 import { PlayerAvatar } from '../components/ui'
+import { TEAMS } from '../../shared/modes'
 
 /** Animates a number from its previous value (score count-up). */
 export function AnimatedNumber({ value }: { value: number }) {
@@ -123,6 +124,7 @@ export function Scoreboard({ players, you, hostId, phase }: { players: PublicPla
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1">
+                  {p.team && <span className={clsx('h-2 w-2 shrink-0 rounded-full', TEAMS[p.team].bar)} title={TEAMS[p.team].name} />}
                   <span className="truncate text-sm font-semibold text-white">{p.name}</span>
                   {p.id === hostId && <span className="text-[10px]">👑</span>}
                   {p.streak >= 2 && <span className="text-xs text-orange-300">🔥{p.streak}</span>}

@@ -65,7 +65,8 @@ export const tokenKey = (code: string) => `token:${code}`
  * Connects to a room over WebSocket, keeps the connection alive, reconnects with
  * backoff and re-joins the same seat using the token the server handed out.
  */
-export function useRoom(code: string) {
+export function useRoom(code: string, opts: { display?: boolean } = {}) {
+  const display = !!opts.display
   const [status, setStatus] = useState<ConnectionStatus>('checking')
   const [state, setState] = useState<PublicState | null>(null)
   const [you, setYou] = useState<string | null>(null)
@@ -194,7 +195,9 @@ export function useRoom(code: string) {
         setStatus('open')
         bestRttRef.current = Infinity
         for (let i = 0; i < 3; i++) window.setTimeout(() => sendRaw({ t: 'time', c: Date.now() }), i * 200)
-        sendJoin()
+        // A TV screen watches without taking a seat.
+        if (display) sendRaw({ t: 'display' })
+        else sendJoin()
       }
       ws.onmessage = onMessage
       ws.onclose = (ev) => {
@@ -247,7 +250,7 @@ export function useRoom(code: string) {
       wsRef.current?.close(1000, 'Leaving')
       wsRef.current = null
     }
-  }, [code, sendRaw])
+  }, [code, sendRaw, display])
 
   const join = useCallback(
     (name: string) => {

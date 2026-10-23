@@ -23,6 +23,7 @@ import { AwardCard } from './results/AwardCard'
 import { buildSlides, Recap } from './results/Recap'
 import { ShareSheet, type ShareData } from './results/Share'
 import { biggestComeback, computeAwards, emojiGrid, roundStats, scoreMessage, type RoundStat } from './results/stats'
+import { TeamResult } from './Teams'
 import { useStartGame } from './useStartGame'
 
 const CONFETTI_COLORS = ['#ffc44d', '#ff6a3d', '#e8336d', '#f59e0b', '#22c55e', '#ffffff']
@@ -491,7 +492,7 @@ export function Results() {
   const winnerLine = ranked[0] && ranked.length > 1 ? (ranked[0].id === you ? 'You win!' : `${ranked[0].name} wins!`) : null
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 pb-12">
+    <main className="mx-auto w-full max-w-6xl px-3 pb-28 sm:px-4 lg:pb-12">
       {recap && slides.length > 0 && <Recap slides={slides} onClose={closeRecap} />}
       {sharing && <ShareSheet data={shareData} onClose={() => setSharing(false)} />}
       {!recap && history.length > 0 && <Confetti />}
@@ -503,13 +504,13 @@ export function Results() {
 
       <section className="relative overflow-hidden rounded-3xl border border-white/10">
         <AlbumWall covers={covers} />
-        <div className="relative grid gap-6 p-6 sm:p-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div className="relative grid grid-cols-1 gap-6 p-5 sm:p-10 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div className="rise-in">
             <p className="mb-2 text-xs font-bold tracking-[0.3em] text-brand-300 uppercase">
               {source.title} · {difficultyLabel(state.settings.difficulty)}
               {state.solo && ' · Solo'}
             </p>
-            <h2 className="mb-3 text-4xl font-black text-white sm:text-5xl">Game Complete! 🎉</h2>
+            <h2 className="mb-3 text-3xl font-black text-white sm:text-5xl">Game Complete! 🎉</h2>
             {winnerLine && (
               <p className="mb-2 inline-flex items-center gap-2 text-xl text-white">
                 <Crown className="h-5 w-5 text-amber-300" /> <span className="font-extrabold">{winnerLine}</span>
@@ -561,13 +562,14 @@ export function Results() {
         </div>
       </section>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0 space-y-6">
+          {state.teams && <TeamResult teams={state.teams} myTeam={me?.team ?? null} />}
           {ranked.length > 1 && <Podium ranked={ranked} />}
           <GameAlbum stats={stats} you={you} solo={state.solo} title={source.title} players={ranked} noun={noun} />
         </div>
 
-        <aside className="space-y-6">
+        <aside className="min-w-0 space-y-6">
           {progress && <ProgressCard update={progress} />}
           <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
             <h3 className="mb-4 text-lg font-bold text-white">{state.daily ? 'That’s today’s challenge!' : 'Ready for more?'}</h3>

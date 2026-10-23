@@ -15,6 +15,7 @@ import { FEATURED_WITH_COVERS } from '../lib/covers'
 import { useMyGroups } from '../lib/groups'
 import { useProgress } from '../lib/progress'
 import { useSite } from '../lib/site'
+import { useQuizList } from '../lib/quizzes'
 import { GAME_MODES } from '../lib/source'
 import { fetchRoomInfo } from '../lib/useRoom'
 import { BRAND } from '../../shared/brand'
@@ -25,6 +26,47 @@ const LOGIN_ERRORS: Record<string, string> = {
   not_configured: 'Google sign-in is not set up on this server yet.',
   email: 'Your Google account email must be verified.',
   blocked: 'This account has been suspended. Mail us if you think this is a mistake.',
+}
+
+/** Popular player-made quizzes, with a nudge to make your own. */
+function QuizShelf() {
+  const { data } = useQuizList('popular')
+  const quizzes = data?.quizzes.slice(0, 4) ?? []
+  return (
+    <section>
+      <SectionTitle
+        right={
+          <Link to="/quizzes" className="text-sm font-semibold text-brand-300 hover:text-brand-200">
+            See all →
+          </Link>
+        }
+      >
+        🧩 Community quizzes
+      </SectionTitle>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {quizzes.map((q) => (
+          <Link key={q.id} to={`/q/${q.id}`} className="group rounded-2xl border border-white/10 bg-white/[0.03] p-2.5 transition hover:-translate-y-0.5 hover:border-white/25">
+            <span className="relative block">
+              <Cover images={q.cover ? [q.cover] : []} size="fill" label={q.title} />
+              <span className="absolute top-1.5 left-1.5 rounded-lg bg-black/70 px-1.5 py-0.5 text-base leading-none">{q.emoji}</span>
+            </span>
+            <span className="mt-2 block truncate text-sm font-bold text-white">{q.title}</span>
+            <span className="block truncate text-xs text-gray-400">
+              {q.trackCount} songs · {q.plays} plays
+            </span>
+          </Link>
+        ))}
+        <Link
+          to="/quizzes/new"
+          className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 p-4 text-center text-gray-300 transition hover:border-brand-400 hover:text-white"
+        >
+          <Plus className="h-7 w-7 text-brand-300" />
+          <span className="font-bold">Make a quiz</span>
+          <span className="text-xs text-gray-400">Pick songs, share a link</span>
+        </Link>
+      </div>
+    </section>
+  )
 }
 
 function MyGroups() {
@@ -304,6 +346,8 @@ export function Home() {
           {features.daily && <DailyCard highlight={params.has('daily')} />}
           <CareerCard />
         </div>
+
+        <QuizShelf />
 
         {me && <MyGroups />}
 

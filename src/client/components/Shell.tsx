@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Users, Wrench, X } from 'lucide-react'
+import { Puzzle, Users, Wrench, X } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { useAuth } from '../lib/auth'
@@ -18,10 +18,13 @@ export function TopNav() {
         <LogoMark className="h-8 w-8" />
         <span className="bg-linear-to-r from-white to-brand-200 bg-clip-text text-xl font-extrabold tracking-tight text-transparent">{BRAND.name}</span>
       </Link>
-      <nav className="flex items-center gap-2">
+      <nav className="flex items-center gap-1 sm:gap-2">
+        <Link to="/quizzes" aria-label="Quizzes" className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800 hover:text-white sm:px-3">
+          <Puzzle className="h-4 w-4" /> <span className="hidden sm:inline">Quizzes</span>
+        </Link>
         {me && (
-          <Link to="/groups" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800 hover:text-white">
-            <Users className="h-4 w-4" /> Groups
+          <Link to="/groups" aria-label="Groups" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-gray-300 hover:bg-gray-800 hover:text-white">
+            <Users className="h-4 w-4" /> <span className="hidden sm:inline">Groups</span>
           </Link>
         )}
         <UserMenu />
@@ -31,7 +34,7 @@ export function TopNav() {
 }
 
 /** Page chrome: a plum night sky with drifting marigold/magenta light, a row of marquee bulbs and an announcement bar. */
-export function Shell({ children, banner = true, nav = true }: { children: ReactNode; banner?: boolean; nav?: boolean }) {
+export function Shell({ children, banner = true, nav = true, footer = true }: { children: ReactNode; banner?: boolean; nav?: boolean; footer?: boolean }) {
   const site = useSite()
   const [dismissed, setDismissed] = useState(() => load('banner-dismissed'))
   const news = site.banner
@@ -46,7 +49,7 @@ export function Shell({ children, banner = true, nav = true }: { children: React
       <div aria-hidden="true" className="film-grain pointer-events-none absolute inset-0" />
       <div aria-hidden="true" className="marquee-bulbs pointer-events-none absolute inset-x-0 top-0 h-2.5" />
       {maintenance ? (
-        <div className="fixed top-0 right-0 left-0 z-30 flex items-center justify-center gap-2 bg-amber-400 py-1.5 pr-2 pl-4 text-sm font-semibold text-black" role="status" data-testid="maintenance-banner">
+        <div className="relative z-30 flex items-center justify-center gap-2 bg-amber-400 py-1.5 pr-2 pl-4 text-xs font-semibold text-black sm:text-sm" role="status" data-testid="maintenance-banner">
           <Wrench className="h-4 w-4 shrink-0" />
           <p className="text-center">{site.maintenance.message}</p>
         </div>
@@ -54,7 +57,8 @@ export function Shell({ children, banner = true, nav = true }: { children: React
         showBanner && (
           <div
             className={clsx(
-              'fixed top-0 right-0 left-0 z-30 flex items-center gap-2 py-1.5 pr-2 pl-4 text-sm font-semibold',
+              // In the page flow (not fixed), so a long message on a phone pushes the header down instead of covering it.
+              'relative z-30 flex items-center gap-2 py-1.5 pr-2 pl-4 text-xs font-semibold sm:text-sm',
               news.tone === 'brand' && 'bg-linear-to-r from-brand-300 via-brand-500 to-rose-500 text-black',
               news.tone === 'info' && 'bg-sky-500 text-black',
               news.tone === 'warning' && 'bg-amber-400 text-black',
@@ -76,10 +80,10 @@ export function Shell({ children, banner = true, nav = true }: { children: React
           </div>
         )
       )}
-      <div className={clsx('relative flex min-h-dvh flex-col', (showBanner || maintenance) && 'pt-9')}>
+      <div className="relative flex min-h-dvh flex-col">
         {nav && <TopNav />}
         <div className="flex-1">{children}</div>
-        <Footer />
+        {footer && <Footer />}
       </div>
     </div>
   )

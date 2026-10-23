@@ -26,6 +26,8 @@ export function sourceImages(source: Source): string[] {
       const img = source.image ?? playlistImage(source.provider, source.id)
       return img ? [img] : []
     }
+    case 'quiz':
+      return source.image ? [source.image] : []
     case 'search':
     case 'blend':
       return []

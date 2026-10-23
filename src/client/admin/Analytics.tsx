@@ -285,6 +285,7 @@ function Games({ days }: { days: number }) {
         <StatTile label="Avg. players" value={data.avgPlayers} format={(n) => n.toFixed(1)} hint="per game" />
         <StatTile label="Avg. accuracy" value={data.avgAccuracy} format={(n) => pct(n)} hint="right answers" />
         <StatTile label="Avg. length" value={data.avgMinutes} format={(n) => `${n.toFixed(1)} min`} hint="start to finish" />
+        <StatTile label="Party features" value={total ? data.party.teams / total : 0} format={(n) => pct(n)} hint={`teams · ${total ? pct(data.party.powerUps / total) : '0%'} power-ups · ${total ? pct(data.party.tv / total) : '0%'} TV · ${data.party.quizzes} quiz games`} />
         <StatTile label="Used voice" value={total ? data.social.voiceGames / total : 0} format={(n) => pct(n)} hint={`chat in ${total ? pct(data.social.chatGames / total) : '0%'} of games`} />
       </div>
       <ChartCard title="Games per day by type">

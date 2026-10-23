@@ -6,6 +6,7 @@ import {
   FeaturesSchema,
   GroupActionSchema,
   MaintenanceSchema,
+  QuizActionSchema,
   RANGES,
   RoomActionSchema,
   SiteConfigPatchSchema,
@@ -24,6 +25,7 @@ import { clearConfigCache, siteConfig } from './analytics'
 import { adminEmails, isAdmin, type SessionUser } from './auth'
 import { removeMember, type GroupRow } from './groups'
 import { json } from './http'
+import { adminQuizRow, QUIZ_SELECT, type QuizRow } from './quizzes'
 import { roomStub } from './rooms'
 
 const PAGE_SIZE = 25
@@ -480,6 +482,31 @@ export async function handleAdmin(request: Request, env: Env, url: URL, user: Se
     return detail ? json(detail) : json({ error: 'Group not found' }, 404)
   }
   if (groupMatch && method === 'POST') return groupAction(request, env, admin, groupMatch[1]!)
+
+  if (path === '/api/admin/quizzes' && method === 'GET') {
+    const q = (url.searchParams.get('q') ?? '').trim().toLowerCase().slice(0, 80)
+    const removed = url.searchParams.get('filter') === 'removed'
+    const p = page(url)
+    const where = `WHERE ${removed ? 'q.removed_at IS NOT NULL' : 'q.removed_at IS NULL'} ${q ? 'AND (LOWER(q.title) LIKE ?1 OR LOWER(u.email) LIKE ?1)' : 'AND ?1 IS NULL'}`
+    const param = q ? `%${q}%` : null
+    const [list, count] = await env.DB.batch([
+      env.DB.prepare(`${QUIZ_SELECT} ${where} ORDER BY q.created_at DESC LIMIT ?2 OFFSET ?3`).bind(param, PAGE_SIZE, (p - 1) * PAGE_SIZE),
+      env.DB.prepare(`SELECT COUNT(*) AS n FROM quizzes q JOIN users u ON u.id = q.owner_id ${where}`).bind(param),
+    ])
+    return json({ rows: (list!.results as unknown as QuizRow[]).map(adminQuizRow), total: num((count!.results[0] as Row).n), page: p, pageSize: PAGE_SIZE })
+  }
+  const quizMatch = path.match(/^\/api\/admin\/quizzes\/([A-Za-z0-9]{8,16})$/)
+  if (quizMatch && method === 'POST') {
+    const b = await body(request, QuizActionSchema)
+    if (b.error) return b.error
+    const quiz = await env.DB.prepare('SELECT title FROM quizzes WHERE id = ?').bind(quizMatch[1]).first<{ title: string }>()
+    if (!quiz) return json({ error: 'Quiz not found' }, 404)
+    if (b.data.action === 'remove') await env.DB.prepare('UPDATE quizzes SET removed_at = ?, removed_reason = ? WHERE id = ?').bind(Date.now(), b.data.reason || null, quizMatch[1]).run()
+    else if (b.data.action === 'restore') await env.DB.prepare('UPDATE quizzes SET removed_at = NULL, removed_reason = NULL WHERE id = ?').bind(quizMatch[1]).run()
+    else await env.DB.prepare('DELETE FROM quizzes WHERE id = ?').bind(quizMatch[1]).run()
+    await audit(env, admin, `quiz.${b.data.action}`, 'quiz', quizMatch[1]!, { title: quiz.title, ...b.data })
+    return json({ ok: true })
+  }
 
   if (path === '/api/admin/rooms' && method === 'GET') return json({ rooms: await liveRooms(env) })
   const roomMatch = path.match(/^\/api\/admin\/rooms\/([A-Z]{4})$/)

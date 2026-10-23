@@ -179,6 +179,9 @@ export function PrivacyPage() {
           </li>
           <li>When you created your account, when you last signed in and how many times, and the approximate location of your most recent visit.</li>
           <li>Your groups, the group invites you send (including the email addresses you invite), and your game history and stats.</li>
+          <li>
+            <strong className="text-gray-100">Quizzes you make</strong>: the title, description, icon and songs you pick, whether it’s public or link-only, and how many times it’s been played.
+          </li>
         </List>
         <h3 className="pt-2 font-semibold text-white">If you connect Spotify</h3>
         <List>
@@ -270,6 +273,8 @@ export function PrivacyPage() {
           <li>People in your room see the name you typed (and your Google photo if signed in), your score, reactions and chat.</li>
           <li>Members of a group see each other’s names and photos; group admins also see members’ email addresses.</li>
           <li>Daily challenge leaderboards show names and scores to everyone.</li>
+          <li>Quizzes you make show your name to anyone who opens them; public quizzes are also listed on the Quizzes page.</li>
+          <li>When a TV screen is connected to a room, everyone in the room can see the names, answers and scores shown on it.</li>
           <li>{BRAND.name}’s administrator can see account details and analytics to run and moderate the service.</li>
         </List>
       </Section>
@@ -373,7 +378,7 @@ export function TermsPage() {
       <Section id="conduct" title="Fair play & conduct">
         <p>Keep {BRAND.name} fun for everyone. Don’t:</p>
         <List>
-          <li>Use names, chat, stickers, group names or voice to harass, threaten, bully or demean anyone, or to share hateful, sexual, violent or illegal content.</li>
+          <li>Use names, chat, stickers, group names, quizzes or voice to harass, threaten, bully or demean anyone, or to share hateful, sexual, violent or illegal content.</li>
           <li>Impersonate other people, or share someone’s personal information without their permission.</li>
           <li>Cheat — for example with bots, scripts or tools that look up answers — or manipulate leaderboards.</li>
           <li>Spam, scrape, overload, probe or attack {BRAND.name}, or try to get around rate limits, bans or security.</li>
@@ -383,8 +388,9 @@ export function TermsPage() {
 
       <Section id="your-content" title="What you post">
         <p>
-          You keep ownership of the names, messages and group names you create. You give {BRAND.name} permission to store and show them to other players as needed to run the game. You’re
-          responsible for what you post, and you confirm you have the right to post it.
+          You keep ownership of the names, messages, group names and quizzes you create. You give {BRAND.name} permission to store and show them to other players as needed to run the game — a
+          public quiz is shown to everyone, with your name. A quiz only links to songs from Apple Music or Spotify; it doesn’t give you or anyone else rights to the music. You’re responsible
+          for what you post, and you confirm you have the right to post it.
         </p>
       </Section>
 
@@ -408,7 +414,7 @@ export function TermsPage() {
 
       <Section id="moderation" title="Moderation">
         <p>
-          To keep {BRAND.name} safe we may, without notice, remove names, messages, groups or leaderboard scores, remove players from rooms, close rooms, and suspend or delete accounts that break
+          To keep {BRAND.name} safe we may, without notice, remove names, messages, groups, quizzes or leaderboard scores, remove players from rooms, close rooms, and suspend or delete accounts that break
           these Terms. If you think we got it wrong, email {MAIL}.
         </p>
       </Section>

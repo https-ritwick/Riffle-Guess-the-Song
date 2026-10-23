@@ -6,6 +6,7 @@ import type { AwardName } from './awards'
 import type { ChallengePrompt } from './challenges'
 import { REACTIONS } from './rules'
 import { MAX_CHAT_LENGTH, MAX_SIGNAL_LENGTH, STICKER_IDS, type ChatMessage, type VoiceState } from './chat'
+import { POWER_IDS, TEAM_IDS, type PowerId, type TeamId, type TeamStanding } from './modes'
 
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
 export const ROOM_CODE_RE = /^[A-HJ-NP-Z]{4}$/
@@ -42,6 +43,7 @@ export type Track = z.infer<typeof TrackSchema>
 
 export const PlaylistProviderSchema = z.enum(['spotify', 'apple'])
 export const PlaylistKindSchema = z.enum(['playlist', 'album'])
+export const QUIZ_ID_RE = /^[A-Za-z0-9]{8,16}$/
 export const PLAYLIST_ID_RE = /^(pl\.[A-Za-z0-9-]{8,80}|[A-Za-z0-9]{8,40})$/
 
 export const SourceSchema = z.discriminatedUnion('kind', [
@@ -67,6 +69,14 @@ export const SourceSchema = z.discriminatedUnion('kind', [
   }),
   /** Songs contributed by the players themselves (Spotify top tracks or a playlist each). */
   z.object({ kind: z.literal('blend') }),
+  /** A quiz someone made on Riffle (its songs are loaded from /api/quizzes/:id). */
+  z.object({
+    kind: z.literal('quiz'),
+    id: z.string().regex(QUIZ_ID_RE),
+    name: z.string().min(1).max(80),
+    count: z.number().int().positive().max(200).optional(),
+    image: z.string().max(500).regex(ARTWORK_URL_RE).optional(),
+  }),
 ])
 export type Source = z.infer<typeof SourceSchema>
 export type PlaylistSource = Extract<Source, { kind: 'playlist' }>
@@ -101,6 +111,12 @@ const SettingsShape = {
   /** Final song is worth double points. */
   doubleFinal: z.boolean(),
   game: GameKindSchema,
+  /** Each player gets one 50-50, Double and Shield per game. */
+  powerUps: z.boolean(),
+  /** Two teams; the team with the best average score wins. */
+  teams: z.boolean(),
+  /** Song games: each song starts with the last letter of the one before. */
+  antakshari: z.boolean(),
 }
 
 export const SettingsSchema = z.object({
@@ -110,6 +126,9 @@ export const SettingsSchema = z.object({
   difficulty: SettingsShape.difficulty.default('hard'),
   doubleFinal: SettingsShape.doubleFinal.default(true),
   game: SettingsShape.game.default('songs'),
+  powerUps: SettingsShape.powerUps.default(false),
+  teams: SettingsShape.teams.default(false),
+  antakshari: SettingsShape.antakshari.default(false),
 })
 export type Settings = z.infer<typeof SettingsSchema>
 
@@ -130,6 +149,9 @@ export const DEFAULT_SETTINGS: Settings = {
   difficulty: 'hard',
   doubleFinal: true,
   game: 'songs',
+  powerUps: false,
+  teams: false,
+  antakshari: false,
 }
 
 /** Fill in settings added after a room was created. */
@@ -156,6 +178,14 @@ export const ClientMessageSchema = z.discriminatedUnion('t', [
     avoid: z.array(z.string().max(200)).max(MAX_AVOID).optional(),
   }),
   z.object({ t: z.literal('answer'), round: z.number().int().min(0), choice: z.number().int().min(0).max(3) }),
+  /** Use a power-up on the current round (before answering). */
+  z.object({ t: z.literal('power'), round: z.number().int().min(0), power: z.enum(POWER_IDS) }),
+  /** Pick your team (or, as host, move someone else). */
+  z.object({ t: z.literal('team'), team: z.enum(TEAM_IDS), playerId: z.string().max(40).optional() }),
+  /** Host: deal everyone into two balanced teams at random. */
+  z.object({ t: z.literal('shuffleTeams') }),
+  /** This connection is a TV / big screen showing the game (it never takes a seat). */
+  z.object({ t: z.literal('display') }),
   z.object({ t: z.literal('kick'), playerId: z.string().max(40) }),
   z.object({ t: z.literal('makeHost'), playerId: z.string().max(40) }),
   z.object({ t: z.literal('end') }),
@@ -209,6 +239,10 @@ export interface PublicPlayer {
   first: boolean
   /** In the voice channel (muted or talking), or not (null). */
   voice: VoiceState | null
+  /** Team battles: which team. */
+  team: TeamId | null
+  /** Power-ups this player still has this game. */
+  powers: PowerId[]
 }
 
 export interface Pick {
@@ -219,6 +253,10 @@ export interface Pick {
   ms: number | null
   /** First correct answer of the round. */
   first?: boolean
+  /** Power-up used this round. */
+  power?: PowerId
+  /** Antakshari team battle: answered on the other team's turn (half points). */
+  steal?: boolean
 }
 
 export interface RevealInfo {
@@ -267,6 +305,16 @@ export interface PublicRound {
   challenge: ChallengePrompt | null
   /** During the reveal: the next song's clip, so browsers can load it before it starts. */
   nextPreview: string | null
+  /** Options taken away for you by a 50-50. */
+  removed: number[] | null
+  /** The power-up you used this round. */
+  yourPower: PowerId | null
+  /** Antakshari: the letter this song starts with (null when the chain started fresh). */
+  letter: string | null
+  /** Antakshari, at the reveal: the letter the next song will start with. */
+  nextLetter: string | null
+  /** Antakshari team battle: whose turn it is (the other team can steal for half points). */
+  turn: TeamId | null
 }
 
 export interface RoundSummary {
@@ -321,6 +369,10 @@ export interface PublicState {
   awardNames: Record<string, AwardName> | null
   /** Daily challenge rooms: the day number. */
   daily: number | null
+  /** Team battles: both teams, best first. */
+  teams: TeamStanding[] | null
+  /** TV / big screens showing this room (phones then work as buzzers). */
+  displays: number
 }
 
 export type ServerMessage =

@@ -29,6 +29,13 @@ The original gameplay screen was modelled on the public parts of [Tapzz](https:/
 - **Career:** every game earns XP towards nine filmi ranks (Junior Artist → Bollywood Ka Baadshah), keeps a day streak, and unlocks 14 badges (Pehli Picture, Dhoom, Hat-trick, Raat Baaki Hai…). Stored on the device.
 - **Streak hype:** a burst on the screen at 3, 4, 5, 7 and 10+ right answers in a row.
 - **Emoji songs play as soon as you crack them,** while everyone else is still thinking. AI emoji puzzles come with a word-by-word decode (shown at the reveal) and are only used when iTunes finds the song.
+**Party modes**
+- **🎤 Antakshari:** a song game where every song starts with the last letter (the last consonant, as in Hindi antakshari) of the one before. All four answers start with the same letter, so the letter never gives it away; when no song continues the chain, a fresh letter starts. With teams on, Team Jai and Team Veeru take turns and the other side can steal for half points.
+- **⚔️ Team battles:** the host turns on teams; players are dealt into two balanced teams, can switch sides, and the host can move people or shuffle. The team with the best average score per player wins.
+- **⚡ Power-ups:** the host can turn them on for a match — everyone gets one ✂️ 50-50 (removes two wrong answers), 💰 Double (this answer ×2) and 🛡️ Shield (a wrong answer costs nothing and keeps the streak). The server checks every use.
+- **📺 TV / big-screen mode:** open `/tv/CODE` on a TV, laptop or projector. It shows a QR code to join, the questions, a live "answered" count, reveals, the leaderboard and a podium, and plays the music. Phones become colour-coded A–D buzzers (and go quiet unless you want sound there too).
+- **🧩 Player-made quizzes:** signed-in players build a quiz from song search or by importing a Spotify / Apple Music playlist (5–50 songs), make it public or link-only, and share `/q/:id`. Anyone can play it solo or with friends; public quizzes are on `/quizzes` and in the lobby's music picker. Admins can take quizzes down.
+
 **Admin console & analytics** (`/admin`, only for the site owner's Google account)
 - **Overview:** visitors, signed-in users, sign-ups, games, player seats and rooms vs the previous period, a daily activity chart, live players and the latest admin actions.
 - **Analytics:** audience (daily/weekly/monthly visitors, stickiness, returning visits, devices, OS, browsers, referrers, top pages, a weekday × hour heatmap), geography (countries, states, cities and which game modes each country plays), games & preferences (modes, game types, music sources, favourite presets, difficulty, rounds, timer, group size, finish rate, accuracy, chat/voice use, feature use), songs & questions (most played, hardest, easiest, top artists) and retention (weekly visitor and account cohorts, most active players, daily challenge turnout). Range picker (7d/30d/90d/1y) and CSV exports.
@@ -191,6 +198,7 @@ tests/e2e          Playwright: multiplayer games, playlists, suggestions, groups
 | `visitors`, `visits`, `page_views`, `feature_usage` | first-party analytics: hashed browser id, IST day, approximate location, device, referrer, pages, feature taps |
 | `rooms_log` | every room created (finds live rooms for the console) |
 | `game_events`, `game_participants` | every game played anywhere, with settings, players, scores, accuracy, social use and location |
+| `quizzes` | player-made quizzes: owner, title, description, icon, songs, public/link-only, plays, taken-down state |
 | `item_stats` | plays and accuracy for every song and challenge question |
 | `spotify_links` | a browser's Spotify connection: hashed cookie token, display name, photo, and the top tracks read at connect time (no Spotify tokens are kept) |
 
@@ -198,7 +206,9 @@ tests/e2e          Playwright: multiplayer games, playlists, suggestions, groups
 
 Migration 0005 also adds ban/delete/notes, sign-in count, last seen and approximate location to `users`, and backfills existing group games into the analytics tables.
 
-Schema: `migrations/0001_init.sql` to `migrations/0005_admin_analytics.sql`.
+Migration 0006 adds age and gender to `users`; 0007 adds `quizzes` and records team, power-up, TV and quiz use on each game.
+
+Schema: `migrations/0001_init.sql` to `migrations/0007_quizzes_party.sql`.
 
 ## Run locally
 

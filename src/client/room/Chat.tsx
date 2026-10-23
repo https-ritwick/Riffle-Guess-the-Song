@@ -303,6 +303,12 @@ export function ChatDock({ messages, voice, snapshot, raised }: { messages: Chat
               </div>
               <VoiceRoster players={state.players} snapshot={snapshot} you={you} />
               {snapshot.micError && <p className="mt-2 text-xs text-amber-300">{snapshot.micError}</p>}
+              {snapshot.joined && snapshot.unreachable.size > 0 && (
+                <p className="mt-2 text-xs text-amber-300" data-testid="voice-unreachable">
+                  Can’t reach {state.players.filter((p) => snapshot.unreachable.has(p.id)).map((p) => p.name).join(', ')} — their network is blocking voice. Switching to Wi-Fi usually helps.
+                </p>
+              )}
+              {snapshot.joined && <p className="mt-2 text-[11px] text-gray-500">🎧 Earphones let everyone talk at once without echo.</p>}
             </div>
           </header>
 

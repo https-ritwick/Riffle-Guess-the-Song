@@ -44,7 +44,7 @@ export function RoomHeader() {
   const navigate = useNavigate()
 
   return (
-    <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-4">
+    <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-3 py-2.5 sm:px-4 sm:py-4">
       <button type="button" onClick={() => navigate('/')} className="flex items-center gap-2" aria-label={`${BRAND.name} home`}>
         <LogoMark className="h-8 w-8" />
         <span className="hidden text-xl font-extrabold tracking-tight sm:inline">{BRAND.name}</span>

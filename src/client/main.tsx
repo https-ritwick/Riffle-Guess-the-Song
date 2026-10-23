@@ -18,6 +18,10 @@ import { RoomPage } from './pages/RoomPage'
 // Pages most players never open load on demand.
 const AdminApp = lazy(() => import('./admin/AdminApp'))
 const TermsPage = lazy(() => import('./pages/Legal').then((m) => ({ default: m.TermsPage })))
+const QuizzesPage = lazy(() => import('./pages/Quizzes').then((m) => ({ default: m.QuizzesPage })))
+const QuizPage = lazy(() => import('./pages/Quizzes').then((m) => ({ default: m.QuizPage })))
+const QuizBuilderPage = lazy(() => import('./pages/Quizzes').then((m) => ({ default: m.QuizBuilderPage })))
+const TvPage = lazy(() => import('./pages/TvPage'))
 const PrivacyPage = lazy(() => import('./pages/Legal').then((m) => ({ default: m.PrivacyPage })))
 
 const loading = (
@@ -40,6 +44,11 @@ createRoot(document.getElementById('root')!).render(
                   <Route path="/groups" element={<GroupsPage />} />
                   <Route path="/groups/:id" element={<GroupPage />} />
                   <Route path="/g/:code" element={<JoinGroupPage />} />
+                  <Route path="/quizzes" element={<QuizzesPage />} />
+                  <Route path="/quizzes/new" element={<QuizBuilderPage />} />
+                  <Route path="/quizzes/:id/edit" element={<QuizBuilderPage />} />
+                  <Route path="/q/:id" element={<QuizPage />} />
+                  <Route path="/tv/:code" element={<TvPage />} />
                   <Route path="/terms" element={<TermsPage />} />
                   <Route path="/privacy" element={<PrivacyPage />} />
                   <Route path="/admin/*" element={<AdminApp />} />

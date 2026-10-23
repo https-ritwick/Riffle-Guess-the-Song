@@ -2,6 +2,7 @@ import { ArrowRight, Loader2, Users, VolumeX, WifiOff } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { ROOM_CODE_RE } from '../../shared/protocol'
+import { Footer } from '../components/Footer'
 import { Shell } from '../components/Shell'
 import { useToast } from '../components/Toasts'
 import { SignInButton } from '../components/UserMenu'
@@ -294,6 +295,8 @@ function RoomView({ code }: { code: string }) {
         {/* Room to scroll the page clear of the chat dock. */}
         {!ctx.state.solo && <div aria-hidden="true" className="h-16" />}
         <SoundBlockedBanner />
+        {/* The footer stays out of the way while a round is being played. */}
+        {(phase === 'lobby' || phase === 'results') && <Footer />}
       </RoomContext.Provider>
     )
   }
@@ -321,7 +324,7 @@ export function RoomPage() {
     )
   }
   return (
-    <Shell banner={false} nav={false}>
+    <Shell banner={false} nav={false} footer={false}>
       <RoomView key={code} code={code} />
     </Shell>
   )

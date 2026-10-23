@@ -7,15 +7,19 @@ import { parsePlaylistUrl } from '../../shared/playlist'
 import { Button, Cover, Input } from '../components/ui'
 import { FEATURED_WITH_COVERS, presetImages, sourceImages } from '../lib/covers'
 import { loadPlaylist, searchArtists, type ArtistHit } from '../lib/itunes'
+import { useAuth } from '../lib/auth'
+import { quizAsSource, useMyQuizzes, useQuizList } from '../lib/quizzes'
+import { Link } from 'react-router'
 import { describeSource } from '../lib/source'
 import { BlendOrb, BlendPanel } from './Blend'
 import { useRoomContext } from './context'
 
-type Tab = PresetGroup | 'blend' | 'playlists' | 'artist' | 'search'
+type Tab = PresetGroup | 'blend' | 'playlists' | 'quizzes' | 'artist' | 'search'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'blend', label: '✨ Blend' },
   { id: 'playlists', label: 'Playlists' },
+  { id: 'quizzes', label: '🧩 Quizzes' },
   ...PRESET_GROUPS,
   { id: 'artist', label: 'Artist' },
   { id: 'search', label: 'Search' },
@@ -30,6 +34,7 @@ function initialTab(source: Source): Tab {
   if (source.kind === 'artist') return 'artist'
   if (source.kind === 'search') return 'search'
   if (source.kind === 'playlist') return 'playlists'
+  if (source.kind === 'quiz') return 'quizzes'
   return PRESETS.find((p) => p.id === source.id)?.group ?? 'charts'
 }
 
@@ -40,6 +45,7 @@ function sameSource(a: Source, b: Source): boolean {
   if (a.kind === 'search' && b.kind === 'search') return a.query.toLowerCase() === b.query.toLowerCase()
   if (a.kind === 'playlist' && b.kind === 'playlist') return a.provider === b.provider && a.id === b.id
   if (a.kind === 'blend' && b.kind === 'blend') return true
+  if (a.kind === 'quiz' && b.kind === 'quiz') return a.id === b.id
   return false
 }
 
@@ -67,7 +73,7 @@ function Tile({
       onClick={onPick}
       aria-pressed={selected}
       className={clsx(
-        'group flex flex-col gap-3 rounded-xl border p-3 text-left transition-colors',
+        'group flex min-w-0 flex-col gap-2 rounded-xl border p-2 text-left transition-colors sm:gap-3 sm:p-3',
         selected ? 'border-brand-500 bg-brand-500/10 ring-1 ring-brand-500/40' : 'border-gray-800 bg-gray-900/60 hover:border-gray-600 hover:bg-gray-800/60',
       )}
     >
@@ -81,10 +87,10 @@ function Tile({
         )}
       </span>
       <span className="min-w-0">
-        <span className="block truncate font-bold leading-tight text-white">{title}</span>
+        <span className="block truncate text-sm font-bold leading-tight text-white sm:text-base">{title}</span>
         <span className="mt-0.5 line-clamp-2 block text-xs text-gray-400">{subtitle}</span>
       </span>
-      <span className={clsx('mt-auto text-sm font-medium', selected ? 'text-brand-400' : 'text-brand-400/80 group-hover:text-brand-400')}>
+      <span className={clsx('mt-auto text-sm font-medium max-sm:hidden', selected ? 'text-brand-400' : 'text-brand-400/80 group-hover:text-brand-400')}>
         {selected ? 'Selected' : readOnly ? (
           <span className="inline-flex items-center gap-1">
             <Send className="h-3.5 w-3.5" /> Suggest
@@ -97,12 +103,28 @@ function Tile({
   )
 }
 
-function PresetGrid({ group, current, readOnly, onPick }: { group: PresetGroup; current: Source; readOnly: boolean; onPick: (s: Source) => void }) {
+/** Phones show this many tiles per list until "Show all" is tapped. */
+const PHONE_TILES = 6
+
+function ShowAll({ total, open, onOpen }: { total: number; open: boolean; onOpen: () => void }) {
+  if (open || total <= PHONE_TILES) return null
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-      {PRESETS.filter((p) => p.group === group).map((p: Preset) => {
+    <button type="button" onClick={onOpen} className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.03] py-2.5 text-sm font-semibold text-gray-200 sm:hidden">
+      Show all {total}
+    </button>
+  )
+}
+
+function PresetGrid({ group, current, readOnly, onPick }: { group: PresetGroup; current: Source; readOnly: boolean; onPick: (s: Source) => void }) {
+  const [all, setAll] = useState(false)
+  const presets = PRESETS.filter((p) => p.group === group)
+  return (
+    <>
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
+      {presets.map((p: Preset, i) => {
         const source: Source = { kind: 'preset', id: p.id }
         return (
+          <div key={p.id} className={clsx('contents', !all && i >= PHONE_TILES && !sameSource(current, source) && 'max-sm:hidden')}>
           <Tile
             key={p.id}
             images={presetImages(p.id)}
@@ -113,9 +135,12 @@ function PresetGrid({ group, current, readOnly, onPick }: { group: PresetGroup; 
             readOnly={readOnly}
             onPick={() => onPick(source)}
           />
+          </div>
         )
       })}
     </div>
+    <ShowAll total={presets.length} open={all} onOpen={() => setAll(true)} />
+    </>
   )
 }
 
@@ -125,6 +150,7 @@ function PlaylistTab({ current, readOnly, onPick }: { current: Source; readOnly:
   const [info, setInfo] = useState<PlaylistInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [all, setAll] = useState(false)
   const [category, setCategory] = useState<PlaylistCategory>(
     () => (current.kind === 'playlist' && FEATURED_WITH_COVERS.find((p) => p.provider === current.provider && p.id === current.id)?.category) || 'desi',
   )
@@ -217,7 +243,10 @@ function PlaylistTab({ current, readOnly, onPick }: { current: Source; readOnly:
                 type="button"
                 role="tab"
                 aria-selected={category === c.id}
-                onClick={() => setCategory(c.id)}
+                onClick={() => {
+                  setCategory(c.id)
+                  setAll(false)
+                }}
                 className={clsx(
                   'shrink-0 rounded-full px-3 py-1 text-xs font-semibold ring-1 transition-colors',
                   category === c.id ? 'bg-brand-400 text-black ring-brand-300' : 'bg-gray-900 text-gray-300 ring-gray-700 hover:text-white',
@@ -228,8 +257,8 @@ function PlaylistTab({ current, readOnly, onPick }: { current: Source; readOnly:
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-          {FEATURED_WITH_COVERS.filter((p) => p.category === category).map((p) => {
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-4">
+          {FEATURED_WITH_COVERS.filter((p) => p.category === category).map((p, i) => {
             const source: Source = {
               kind: 'playlist',
               provider: p.provider,
@@ -241,8 +270,8 @@ function PlaylistTab({ current, readOnly, onPick }: { current: Source; readOnly:
               ...(p.image ? { image: p.image } : {}),
             }
             return (
+              <div key={p.id} className={clsx('contents', !all && i >= PHONE_TILES && !sameSource(current, source) && 'max-sm:hidden')}>
               <Tile
-                key={p.id}
                 images={p.image ? [p.image] : presetImages('bollywood-hits')}
                 title={p.name}
                 subtitle={`${p.provider === 'spotify' ? 'Spotify' : 'Apple Music'} · ${p.owner}`}
@@ -250,11 +279,74 @@ function PlaylistTab({ current, readOnly, onPick }: { current: Source; readOnly:
                 readOnly={readOnly}
                 onPick={() => onPick(source)}
               />
+              </div>
             )
           })}
         </div>
+        <ShowAll total={FEATURED_WITH_COVERS.filter((p) => p.category === category).length} open={all} onOpen={() => setAll(true)} />
       </div>
       {state.settings.source.kind === 'playlist' && <p className="text-xs text-gray-500">Tip: songs without a preview on the streaming service are skipped automatically.</p>}
+    </div>
+  )
+}
+
+/** Quizzes players made on ${BRAND_NAME}: popular ones, newest ones and your own. */
+function QuizzesTab({ current, readOnly, onPick }: { current: Source; readOnly: boolean; onPick: (s: Source) => void }) {
+  const { me } = useAuth()
+  const [view, setView] = useState<'popular' | 'new' | 'mine'>('popular')
+  const [q, setQ] = useState('')
+  const list = useQuizList(view === 'new' ? 'new' : 'popular', q, view !== 'mine')
+  const mine = useMyQuizzes(!!me && view === 'mine')
+  const quizzes = view === 'mine' ? mine.data : list.data?.quizzes
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {(['popular', 'new', ...(me ? (['mine'] as const) : [])] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setView(v)}
+            aria-pressed={view === v}
+            className={clsx('rounded-full px-3 py-1 text-xs font-semibold ring-1', view === v ? 'bg-brand-400 text-black ring-brand-300' : 'bg-gray-900 text-gray-300 ring-gray-700 hover:text-white')}
+          >
+            {v === 'popular' ? '🔥 Popular' : v === 'new' ? '✨ New' : 'Mine'}
+          </button>
+        ))}
+        <Link to="/quizzes/new" className="ml-auto text-xs font-semibold text-brand-300 hover:text-brand-200" target="_blank">
+          + Make a quiz
+        </Link>
+      </div>
+      {view !== 'mine' && (
+        <div className="relative">
+          <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-gray-500" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search quizzes…" aria-label="Search quizzes" className="pl-10" maxLength={60} />
+        </div>
+      )}
+      {!quizzes && <p className="py-4 text-center text-sm text-gray-500">Loading quizzes…</p>}
+      {quizzes?.length === 0 && (
+        <p className="rounded-xl bg-white/[0.03] p-4 text-center text-sm text-gray-400">
+          {view === 'mine' ? 'You haven’t made a quiz yet.' : 'No quizzes found.'}{' '}
+          <Link to="/quizzes/new" className="font-semibold text-brand-300" target="_blank">
+            Make one →
+          </Link>
+        </p>
+      )}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+        {quizzes?.map((quiz) => {
+          const source = quizAsSource(quiz)
+          return (
+            <Tile
+              key={quiz.id}
+              images={quiz.cover ? [quiz.cover] : []}
+              title={`${quiz.emoji} ${quiz.title}`}
+              subtitle={`${quiz.trackCount} songs · by ${quiz.owner.name} · ${quiz.plays} plays`}
+              selected={sameSource(current, source)}
+              readOnly={readOnly}
+              onPick={() => onPick(source)}
+            />
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -427,6 +519,8 @@ export function SourcePicker({ onSuggested }: { onSuggested?: (s: Source) => voi
         <BlendPanel current={source} readOnly={readOnly} onPick={pick} />
       ) : tab === 'playlists' ? (
         <PlaylistTab current={source} readOnly={readOnly} onPick={pick} />
+      ) : tab === 'quizzes' ? (
+        <QuizzesTab current={source} readOnly={readOnly} onPick={pick} />
       ) : tab === 'artist' ? (
         <ArtistSearch current={source} readOnly={readOnly} onPick={pick} />
       ) : tab === 'search' ? (

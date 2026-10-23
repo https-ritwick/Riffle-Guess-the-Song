@@ -41,6 +41,7 @@ import {
 import { sanitizeName } from '../shared/text'
 import { matchSong, songSearchUrl, type SongClip, type SongRef } from '../shared/songs'
 import { istDay, type AdminRoom } from '../shared/admin'
+import { buildAntakshari, POWER_IDS, STEAL_SHARE, TEAM_IDS, teamStandings, type PowerId, type TeamId } from '../shared/modes'
 import { aiEnabled, generateAwardNames, generateChallenges } from './ai'
 import { json } from './http'
 import { spotifyArtwork } from './playlist'
@@ -80,6 +81,10 @@ interface PlayerRecord {
   voice?: VoiceState | null
   /** Rough location and device, for analytics (from Cloudflare, set by our Worker). */
   geo?: PlayerGeo | null
+  /** Team battles: which team. */
+  team?: TeamId | null
+  /** Power-ups already used this game. */
+  powersUsed?: PowerId[]
 }
 
 interface PlayerGeo {
@@ -99,6 +104,10 @@ interface AnswerRecord {
   applied: boolean
   /** First correct answer of the round. */
   first?: boolean
+  /** Power-up used on this answer. */
+  power?: PowerId
+  /** Antakshari team battle: answered on the other team's turn. */
+  steal?: boolean
 }
 
 interface RoomQuestion extends Question {
@@ -111,6 +120,8 @@ interface RoomQuestion extends Question {
   challenge?: ChallengePrompt
   /** Emoji songs: looked up so the reveal can play the song. */
   song?: { title: string; movie: string; singer: string }
+  /** Antakshari: the letter this song starts with (null: the chain started fresh). */
+  letter?: string | null
 }
 
 interface GameRecord {
@@ -127,6 +138,11 @@ interface GameRecord {
   /** When the game began, and whether it has gone into the analytics tables. */
   createdAt?: number
   tracked?: boolean
+  /** This round: power-ups used, and the options a 50-50 took away, by player. */
+  powers?: Record<string, PowerId>
+  removed?: Record<string, number[]>
+  /** Any TV / big screen watched this game. */
+  tv?: boolean
 }
 
 interface RoomRecord {
@@ -180,6 +196,8 @@ interface Attachment {
   geo?: PlayerGeo | null
   /** Site switches the admin turned off ('chat', 'voice'). */
   off?: string[]
+  /** A TV / big screen showing the game: never takes a seat. */
+  display?: boolean
 }
 
 const IN_GAME: Phase[] = ['countdown', 'question', 'reveal']
@@ -210,6 +228,8 @@ function sourceTitle(settings: Settings): string {
       return source.name
     case 'blend':
       return 'Blend'
+    case 'quiz':
+      return source.name
   }
 }
 
@@ -527,6 +547,12 @@ export class GameRoom extends DurableObject<Env> {
       return false
     }
     if (msg.t === 'join') return this.join(ws, msg.name, msg.token)
+    if (msg.t === 'display') {
+      if (att.pid || att.display) return false
+      ws.serializeAttachment({ ...att, display: true } satisfies Attachment)
+      if (room.game && IN_GAME.includes(room.phase)) room.game.tv = true
+      return true
+    }
 
     const player = att.pid ? room.players.find((p) => p.id === att.pid) : undefined
     if (!player) {
@@ -537,6 +563,17 @@ export class GameRoom extends DurableObject<Env> {
     switch (msg.t) {
       case 'answer':
         return this.answer(player, msg.round, msg.choice, now)
+
+      case 'power':
+        return this.usePower(player, msg.round, msg.power)
+
+      case 'team': {
+        if (!room.settings.teams || room.solo || (room.phase !== 'lobby' && room.phase !== 'results')) return false
+        const target = msg.playerId ? room.players.find((p) => p.id === msg.playerId) : player
+        if (!target || (target !== player && room.hostId !== player.id) || target.team === msg.team) return false
+        target.team = msg.team
+        return true
+      }
 
       case 'react': {
         if (now - att.lastReaction < REACTION_COOLDOWN_MS) return false
@@ -626,8 +663,12 @@ export class GameRoom extends DurableObject<Env> {
           this.send(ws, { t: 'error', code: 'bad_source', message: 'Unknown category.' })
           return false
         }
+        // Solo games have no teams.
+        if (room.solo) next.data.teams = false
+        const teamsOn = next.data.teams && !room.settings.teams
         room.settings = next.data
         room.notice = null
+        if (teamsOn) this.dealTeams(false)
         // Picking a challenge starts AI writing its questions while everyone gets ready.
         this.prefetch()
         return true
@@ -667,6 +708,12 @@ export class GameRoom extends DurableObject<Env> {
           s.close(4003, 'Removed by host')
         }
         if (room.phase === 'question' && this.everyoneAnswered()) this.reveal(now)
+        return true
+      }
+
+      case 'shuffleTeams': {
+        if (!room.settings.teams || (room.phase !== 'lobby' && room.phase !== 'results')) return false
+        this.dealTeams(true)
         return true
       }
 
@@ -773,6 +820,7 @@ export class GameRoom extends DurableObject<Env> {
         leftAt: null,
         geo: att.geo ?? null,
       }
+      if (room.settings.teams && !room.solo) player.team = this.smallerTeam()
       room.players.push(player)
     }
 
@@ -872,6 +920,7 @@ export class GameRoom extends DurableObject<Env> {
       this.backToMenu('The Blend needs more songs — ask players to add their Spotify or a playlist.')
       return true
     }
+    if (room.settings.antakshari) return this.startAntakshari(pool, isBlend ? owners : new Map())
     const built = buildQuestions(pool, { ...room.settings, order: 'given' }, secureRandom)
     if (!built.ok) {
       this.backToMenu(built.message)
@@ -886,6 +935,24 @@ export class GameRoom extends DurableObject<Env> {
       owners: isBlend ? (owners.get(playedKey(q.track)) ?? []) : [],
     }))
     this.beginGame(questions, built.notice)
+    return true
+  }
+
+  /** Antakshari: a chain of songs, each starting with the last letter of the one before. */
+  private startAntakshari(pool: Track[], owners: Map<string, string[]>): boolean {
+    const room = this.room!
+    const chain = buildAntakshari(dedupeTracks(pool), { rounds: room.settings.rounds, difficulty: room.settings.difficulty }, secureRandom)
+    if (chain.length < 3) {
+      this.backToMenu('Antakshari needs more songs whose names chain together — try a bigger mix, a long playlist or the Bollywood presets.')
+      return true
+    }
+    const maxOffset = Math.max(0, Math.floor(PREVIEW_SECONDS - 1 - room.settings.guessSeconds - REVEAL_MS / 1000))
+    const questions: RoomQuestion[] = chain.map((q) => ({
+      ...q,
+      clipOffset: room.settings.clipStart === 'random' ? Math.floor(secureRandom() * (maxOffset + 1)) : 0,
+      owners: owners.get(playedKey(q.track)) ?? [],
+    }))
+    this.beginGame(questions, chain.length < room.settings.rounds ? `Only ${chain.length} songs chained together, so this Antakshari has ${chain.length} rounds.` : null)
     return true
   }
 
@@ -954,8 +1021,9 @@ export class GameRoom extends DurableObject<Env> {
     const now = Date.now()
     this.pruneStalePlayers(now)
     this.resetScores()
+    for (const p of room.players) p.powersUsed = []
     const awardNames = pickAwardNames(secureRandom, room.recentAwards)
-    const game: GameRecord = { id: crypto.randomUUID(), questions, index: 0, startsAt: 0, endsAt: 0, answers: {}, history: [], recorded: false, awardNames, createdAt: now }
+    const game: GameRecord = { id: crypto.randomUUID(), questions, index: 0, startsAt: 0, endsAt: 0, answers: {}, history: [], recorded: false, awardNames, createdAt: now, tv: this.displayCount() > 0 }
     room.game = game
     room.phase = 'countdown'
     room.phaseEndsAt = now + COUNTDOWN_MS
@@ -986,32 +1054,79 @@ export class GameRoom extends DurableObject<Env> {
     if (now > game.endsAt + ANSWER_GRACE_MS) return false
 
     const question = game.questions[game.index]!
+    if (game.removed?.[player.id]?.includes(choice)) return false
     const total = game.endsAt - game.startsAt
     const elapsed = Math.min(total, Math.max(0, now - game.startsAt))
     const correct = choice === question.correct
-    const multiplier = this.isDoubleRound() ? 2 : 1
+    const power = game.powers?.[player.id]
+    const turn = this.turnTeam(game.index)
+    const steal = !!turn && player.team !== turn
+    const multiplier = (this.isDoubleRound() ? 2 : 1) * (correct && power === 'double' ? 2 : 1)
     // Racing the room: the first right answer earns a bonus; on Hard a wrong guess costs points.
     const rivals = room.players.filter((p) => p.connected).length > 1
     const first = correct && rivals && !Object.values(game.answers).some((a) => a.correct)
     const base = correct ? scoreAnswer(true, elapsed, total, player.streak + 1) + (first ? FIRST_BONUS : 0) : -WRONG_PENALTY[room.settings.difficulty]
-    const points = base * multiplier
+    // A shield (or a steal attempt) makes a wrong answer free; a steal earns half the points.
+    const points = !correct && (power === 'shield' || steal) ? 0 : Math.round(base * multiplier * (steal ? STEAL_SHARE : 1))
     const live = room.settings.liveScoring
-    game.answers[player.id] = { choice, at: now, ms: elapsed, correct, points, applied: live, first }
-    if (live) this.applyResult(player, correct, points)
+    game.answers[player.id] = { choice, at: now, ms: elapsed, correct, points, applied: live, first, ...(power ? { power } : {}), ...(steal ? { steal } : {}) }
+    if (live) this.applyResult(player, correct, points, power === 'shield')
     if (this.everyoneAnswered()) this.reveal(now)
     return true
   }
 
-  private applyResult(p: PlayerRecord, correct: boolean, points: number): void {
+  private applyResult(p: PlayerRecord, correct: boolean, points: number, shielded = false): void {
     if (correct) {
       p.streak += 1
       p.bestStreak = Math.max(p.bestStreak, p.streak)
       p.correct += 1
       p.score += points
     } else {
-      p.streak = 0
+      if (!shielded) p.streak = 0
       p.score = Math.max(0, p.score + points)
     }
+  }
+
+  /** Use a power-up on the current round: once per game each, before answering. */
+  private usePower(player: PlayerRecord, round: number, power: PowerId): boolean {
+    const room = this.room!
+    const game = room.game
+    if (!room.settings.powerUps || room.phase !== 'question' || !game || round !== game.index) return false
+    if (game.answers[player.id] || game.powers?.[player.id] || player.powersUsed?.includes(power)) return false
+    game.powers = { ...game.powers, [player.id]: power }
+    player.powersUsed = [...(player.powersUsed ?? []), power]
+    if (power === 'fifty') {
+      const q = game.questions[game.index]!
+      const wrong = shuffle([0, 1, 2, 3].filter((i) => i !== q.correct), secureRandom).slice(0, 2)
+      game.removed = { ...game.removed, [player.id]: wrong.sort() }
+    }
+    return true
+  }
+
+  /** Antakshari team battles: teams take turns, starting with Team Jai. */
+  private turnTeam(index: number): TeamId | null {
+    const s = this.room!.settings
+    return s.teams && s.antakshari && s.game === 'songs' && !this.room!.solo ? TEAM_IDS[index % 2]! : null
+  }
+
+  private smallerTeam(): TeamId {
+    const players = this.room!.players
+    const count = (t: TeamId) => players.filter((p) => p.team === t).length
+    return count('b') < count('a') ? 'b' : 'a'
+  }
+
+  /** Put players into two balanced teams: everyone afresh (shuffle) or only those without one. */
+  private dealTeams(reshuffle: boolean): void {
+    const players = this.room!.players
+    if (reshuffle) {
+      shuffle(players, secureRandom).forEach((p, i) => (p.team = TEAM_IDS[i % 2]!))
+      return
+    }
+    for (const p of players) if (!p.team) p.team = this.smallerTeam()
+  }
+
+  private displayCount(): number {
+    return this.ctx.getWebSockets().filter((s) => s.readyState === WebSocket.OPEN && this.attachment(s).display).length
   }
 
   private isDoubleRound(): boolean {
@@ -1070,6 +1185,8 @@ export class GameRoom extends DurableObject<Env> {
         if (game.index + 1 < game.questions.length) {
           game.index += 1
           game.answers = {}
+          game.powers = {}
+          game.removed = {}
           this.startQuestion(game, now)
         } else {
           this.finish()
@@ -1105,10 +1222,18 @@ export class GameRoom extends DurableObject<Env> {
       const a = game.answers[p.id]
       if (!a) p.streak = 0
       else if (!a.applied) {
-        this.applyResult(p, a.correct, a.points)
+        this.applyResult(p, a.correct, a.points, a.power === 'shield')
         a.applied = true
       }
-      picks[p.id] = { choice: a ? a.choice : null, points: a?.points ?? 0, correct: !!a?.correct, ms: a ? a.ms : null, first: !!a?.first }
+      picks[p.id] = {
+        choice: a ? a.choice : null,
+        points: a?.points ?? 0,
+        correct: !!a?.correct,
+        ms: a ? a.ms : null,
+        first: !!a?.first,
+        ...(a?.power ? { power: a.power } : {}),
+        ...(a?.steal ? { steal: true } : {}),
+      }
     }
 
     game.history.push({
@@ -1183,15 +1308,16 @@ export class GameRoom extends DurableObject<Env> {
       db
         .prepare(
           `INSERT OR IGNORE INTO game_events (id, day, room_code, mode, kind, source_kind, source_label, region, difficulty, answer_type, rounds, rounds_played,
-             guess_seconds, live_scoring, group_id, players, signed_in, completed, accuracy, top_score, chats, reactions, voice_users, country, started_at, ended_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             guess_seconds, live_scoring, group_id, players, signed_in, completed, accuracy, top_score, chats, reactions, voice_users, country, started_at, ended_at,
+             teams, power_ups, tv, quiz_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           game.id,
           istDay(startedAt),
           room.code,
           mode,
-          settings.game,
+          settings.game === 'songs' && settings.antakshari ? 'antakshari' : settings.game,
           sourceKind,
           sourceLabel,
           settings.region,
@@ -1213,7 +1339,12 @@ export class GameRoom extends DurableObject<Env> {
           host?.geo?.country ?? null,
           startedAt,
           now,
+          settings.teams && !room.solo ? 1 : 0,
+          settings.powerUps ? 1 : 0,
+          game.tv ? 1 : 0,
+          source.kind === 'quiz' ? source.id : null,
         ),
+      ...(source.kind === 'quiz' && settings.game === 'songs' ? [db.prepare('UPDATE quizzes SET plays = plays + 1 WHERE id = ?').bind(source.id)] : []),
       ...perPlayer.map(({ p, rank, answered, avgMs }) =>
         db
           .prepare(
@@ -1557,6 +1688,8 @@ export class GameRoom extends DurableObject<Env> {
           roundPoints: a && (live || room.phase === 'reveal') ? a.points : null,
           first: !!a?.first && (live || room.phase === 'reveal'),
           voice: p.connected ? (p.voice ?? null) : null,
+          team: room.settings.teams && !room.solo ? (p.team ?? null) : null,
+          powers: room.settings.powerUps ? POWER_IDS.filter((x) => !p.powersUsed?.includes(x)) : [],
         }
       }),
       round:
@@ -1597,6 +1730,11 @@ export class GameRoom extends DurableObject<Env> {
                 : null,
               challenge: room.phase === 'countdown' ? null : (question.challenge ?? null),
               nextPreview: room.phase === 'reveal' && next && !next.challenge ? next.track.preview : null,
+              removed: pid && answering ? (game.removed?.[pid] ?? null) : null,
+              yourPower: pid && answering ? (game.powers?.[pid] ?? null) : null,
+              letter: room.settings.antakshari ? (question.letter ?? null) : null,
+              nextLetter: room.settings.antakshari && room.phase === 'reveal' && next ? (next.letter ?? null) : null,
+              turn: this.turnTeam(game.index),
             }
           : null,
       history:
@@ -1610,6 +1748,8 @@ export class GameRoom extends DurableObject<Env> {
       ai: this.aiOn(),
       daily: room.daily,
       awardNames: room.phase === 'results' || room.phase === 'loading' ? (game?.awardNames ?? null) : null,
+      teams: room.settings.teams && !room.solo ? teamStandings(room.players.map((p) => ({ team: p.team ?? null, score: p.score, correct: p.correct }))) : null,
+      displays: this.displayCount(),
     }
   }
 
@@ -1641,7 +1781,7 @@ export class GameRoom extends DurableObject<Env> {
 
   private attachment(ws: WebSocket): Attachment {
     const a = ws.deserializeAttachment() as Partial<Attachment> | null
-    return { pid: a?.pid ?? null, lastReaction: a?.lastReaction ?? 0, lastChat: a?.lastChat ?? 0, user: a?.user ?? null, member: a?.member ?? false }
+    return { ...a, pid: a?.pid ?? null, lastReaction: a?.lastReaction ?? 0, lastChat: a?.lastChat ?? 0, user: a?.user ?? null, member: a?.member ?? false }
   }
 
   private connectedSockets(): WebSocket[] {

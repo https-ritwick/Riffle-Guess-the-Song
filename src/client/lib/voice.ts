@@ -22,6 +22,8 @@ export interface VoiceSnapshot {
   speaking: ReadonlySet<string>
   /** Player ids we have a working audio connection with. */
   connected: ReadonlySet<string>
+  /** Player ids we couldn't connect to for a while (usually strict mobile networks without a relay). */
+  unreachable: ReadonlySet<string>
 }
 
 const FALLBACK_ICE: RTCIceServer[] = [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] }]
@@ -30,6 +32,11 @@ const RETRY_MS = 2500
 /** A fresh connection isn't torn down by a "hello" that crossed its offer. */
 const FRESH_MS = 3000
 const HELLO_EVERY_MS = 5000
+/** A player still not connected after this long is shown as unreachable. */
+const UNREACHABLE_MS = 10_000
+/** Players we can play at once without a fresh tap (phones only let audio start from a tap). */
+const AUDIO_POOL = 10
+const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
 
 interface Peer {
   id: string
@@ -40,6 +47,7 @@ interface Peer {
   pendingIce: RTCIceCandidateInit[]
   meter: (() => number) | null
   retry?: number
+  slow?: number
 }
 
 let iceServers: Promise<RTCIceServer[]> | null = null
@@ -60,7 +68,9 @@ export class VoiceChannel {
   private ctx: AudioContext | null = null
   private meterTimer: number | undefined
   private listeners = new Set<() => void>()
-  private snapshot: VoiceSnapshot = { joined: false, muted: true, opening: false, micError: null, speaking: new Set(), connected: new Set() }
+  private snapshot: VoiceSnapshot = { joined: false, muted: true, opening: false, micError: null, speaking: new Set(), connected: new Set(), unreachable: new Set() }
+  /** Audio elements unlocked during a tap, so every voice can play at once on phones (iOS blocks audio started later). */
+  private pool: HTMLAudioElement[] = []
 
   constructor(private send: (msg: ClientMessage) => boolean) {}
 
@@ -87,6 +97,7 @@ export class VoiceChannel {
   async join(unmuted = false) {
     if (this.snapshot.joined) return
     this.audioContext()
+    this.primeAudio()
     void loadIceServers()
     this.update({ joined: true, muted: true, micError: null })
     this.send({ t: 'voice', state: 'muted' })
@@ -102,10 +113,11 @@ export class VoiceChannel {
     this.closeMic()
     clearInterval(this.meterTimer)
     this.meterTimer = undefined
-    this.update({ joined: false, muted: true, opening: false, speaking: new Set(), connected: new Set() })
+    this.update({ joined: false, muted: true, opening: false, speaking: new Set(), connected: new Set(), unreachable: new Set() })
   }
 
   async setMuted(muted: boolean) {
+    this.primeAudio()
     if (!this.snapshot.joined) await this.join()
     if (muted) {
       this.closeMic()
@@ -147,6 +159,7 @@ export class VoiceChannel {
     const others = new Set(players.filter((p) => p.id !== this.you && p.connected && p.voice).map((p) => p.id))
     for (const id of [...this.peers.keys()]) if (!others.has(id)) this.closePeer(id)
     for (const id of [...this.helloAt.keys()]) if (!others.has(id)) this.helloAt.delete(id)
+    for (const id of this.snapshot.unreachable) if (!others.has(id)) this.markUnreachable(id, false)
     for (const id of others) if (!this.peers.has(id)) void this.connect(id).catch(() => {})
   }
 
@@ -240,10 +253,13 @@ export class VoiceChannel {
     const servers = await loadIceServers()
     this.closePeer(id)
     const pc = new RTCPeerConnection({ iceServers: servers })
-    const audio = new Audio()
+    const audio = this.pool.pop() ?? new Audio()
     audio.autoplay = true
     const peer: Peer = { id, sid, createdAt: Date.now(), pc, audio, pendingIce: [], meter: null }
     this.peers.set(id, peer)
+    peer.slow = window.setTimeout(() => {
+      if (this.peers.get(id) === peer && pc.connectionState !== 'connected') this.markUnreachable(id, true)
+    }, UNREACHABLE_MS)
 
     pc.onicecandidate = (e) => {
       if (e.candidate && this.peers.get(id) === peer) this.signal(id, { kind: 'ice', sid, candidate: e.candidate.toJSON() })
@@ -260,6 +276,7 @@ export class VoiceChannel {
       if (pc.connectionState === 'connected') connected.add(id)
       else connected.delete(id)
       this.update({ connected })
+      if (pc.connectionState === 'connected') this.markUnreachable(id, false)
       if (pc.connectionState === 'failed') {
         clearTimeout(peer.retry)
         peer.retry = window.setTimeout(() => {
@@ -275,13 +292,42 @@ export class VoiceChannel {
     if (!peer) return
     this.peers.delete(id)
     clearTimeout(peer.retry)
+    clearTimeout(peer.slow)
     peer.pc.onicecandidate = peer.pc.ontrack = peer.pc.onconnectionstatechange = null
     peer.pc.close()
     peer.audio.srcObject = null
+    // Unlocked elements go back to the pool for the next connection.
+    if (this.pool.length < AUDIO_POOL) this.pool.push(peer.audio)
+    // A retry keeps the "unreachable" mark; leaving the channel clears it in sync().
     if (this.snapshot.connected.has(id)) {
       const connected = new Set(this.snapshot.connected)
       connected.delete(id)
       this.update({ connected })
+    }
+  }
+
+  private markUnreachable(id: string, on: boolean) {
+    if (this.snapshot.unreachable.has(id) === on) return
+    const unreachable = new Set(this.snapshot.unreachable)
+    if (on) unreachable.add(id)
+    else unreachable.delete(id)
+    this.update({ unreachable })
+  }
+
+  /** Start (silent) playback on a pool of audio elements inside the user's tap, so voices can play later. */
+  private primeAudio() {
+    while (this.pool.length < AUDIO_POOL) {
+      const el = new Audio()
+      el.setAttribute('playsinline', '')
+      el.src = SILENCE
+      // A voice stream set later (srcObject) replaces this silence.
+      void el.play().then(
+        () => {
+          if (!el.srcObject) el.pause()
+        },
+        () => {},
+      )
+      this.pool.push(el)
     }
   }
 

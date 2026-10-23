@@ -256,6 +256,7 @@ export async function buildPool(source: Source, region: RegionCode): Promise<Tra
   if (source.kind === 'search') return searchSongs(source.query, region, { limit: 150 })
   if (source.kind === 'playlist') return playlistTracks(source, region)
   if (source.kind === 'blend') return []
+  if (source.kind === 'quiz') return (await api<{ tracks: Track[] }>(`/api/quizzes/${source.id}`)).tracks
 
   const preset = findPreset(source.id)
   if (!preset) throw new MusicError('Unknown category.')

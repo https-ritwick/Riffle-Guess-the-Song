@@ -20,6 +20,9 @@ export function describeSource(source: Source): SourceDescription {
   if (source.kind === 'blend') {
     return { title: 'Blend', subtitle: 'Everyone’s music, mixed', emoji: '✨', colors: ['#1db954', '#ff6a3d'] }
   }
+  if (source.kind === 'quiz') {
+    return { title: source.name, subtitle: `Player-made quiz${source.count ? ` · ${source.count} songs` : ''}`, emoji: '🧩', colors: ['#a855f7', '#ffc44d'] }
+  }
   if (source.kind === 'search') {
     return { title: `“${source.query}”`, subtitle: 'Search', emoji: '🔎', colors: ['#0ea5e9', '#6366f1'] }
   }
@@ -92,12 +95,22 @@ export const GAME_MODES: GameMode[] = [
   },
 ]
 
+/** Antakshari is a song game with a twist (settings.antakshari), shown as its own mode. */
+export const ANTAKSHARI_MODE = {
+  emoji: '🎤',
+  title: 'Antakshari',
+  tagline: 'Each song starts with the last letter',
+  how: 'Every song starts with the last letter of the one before — “Tum Hi Ho” ends in H, so the next song starts with H. With teams, Jai and Veeru take turns and the other side can steal.',
+  tone: 'from-emerald-400/35 via-emerald-700/15 to-transparent',
+} as const
+
 export function gameMode(id: GameKind): GameMode {
   return GAME_MODES.find((m) => m.id === id) ?? GAME_MODES[0]!
 }
 
 /** What the game is: the music source for song games, or the challenge. */
 export function describeGame(settings: Settings): SourceDescription {
+  if (settings.game === 'songs' && settings.antakshari) return { ...describeSource(settings.source), subtitle: `Antakshari · ${describeSource(settings.source).title}` }
   if (settings.game === 'songs') return describeSource(settings.source)
   const m = gameMode(settings.game)
   return { title: m.title, subtitle: m.tagline, emoji: m.emoji, colors: ['#ffae1f', '#e8336d'] }

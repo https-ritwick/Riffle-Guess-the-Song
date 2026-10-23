@@ -4,7 +4,7 @@ import { createRoom, devSignIn, joinAs, newPlayer, playerNames, skipRecap } from
 async function answerCorrectly(page: Page, playing: string | null) {
   const choices = page.getByTestId('choices').locator('button')
   await expect(choices.first()).toBeEnabled()
-  const texts = (await choices.allTextContents()).map((t) => t.replace(/^\d/, '').trim())
+  const texts = (await choices.allTextContents()).map((t) => t.replace(/^[A-D]/, '').trim())
   const i = texts.findIndex((t) => t === playing)
   expect(i, `options: ${texts.join(' | ')}, playing: ${playing}`).toBeGreaterThanOrEqual(0)
   await choices.nth(i).click()

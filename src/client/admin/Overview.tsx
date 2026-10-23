@@ -22,6 +22,9 @@ export function actionLabel(action: string): string {
     'room.close': 'Closed a room',
     'room.kick': 'Removed a player from a room',
     'daily.remove': 'Removed a daily score',
+    'quiz.remove': 'Took down a quiz',
+    'quiz.restore': 'Restored a quiz',
+    'quiz.delete': 'Deleted a quiz',
     'config.update': 'Changed site settings',
     export: 'Exported data',
   }

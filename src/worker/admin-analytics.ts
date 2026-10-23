@@ -65,7 +65,7 @@ const HOUR = (col: string) => `((${col} + ${IST_MS}) % ${DAY_MS}) / 3600000`
 const presetName = (v: unknown) => findPreset(String(v))?.name ?? String(v ?? 'Unknown')
 
 const MODE_LABEL: Record<string, string> = { party: 'Party room', solo: 'Solo', group: 'Group', daily: 'Daily challenge' }
-const KIND_LABEL: Record<string, string> = { songs: 'Songs', dialogue: 'Dialogue Baazi', actor: 'Star Spotting', emoji: 'Emoji Gaana' }
+const KIND_LABEL: Record<string, string> = { songs: 'Songs', antakshari: 'Antakshari', dialogue: 'Dialogue Baazi', actor: 'Star Spotting', emoji: 'Emoji Gaana' }
 const SOURCE_LABEL: Record<string, string> = {
   preset: 'Preset mix',
   artist: 'Artist',
@@ -73,6 +73,7 @@ const SOURCE_LABEL: Record<string, string> = {
   playlist: 'Playlist link',
   blend: 'Spotify Blend',
   challenge: 'Challenge',
+  quiz: 'Player-made quiz',
   unknown: 'Unknown (older games)',
 }
 
@@ -292,7 +293,8 @@ export async function games(env: Env, r: Range): Promise<GamesReport> {
     db.prepare(
       `SELECT COALESCE(AVG(completed), 0) AS completion, COALESCE(AVG(players), 0) AS players, COALESCE(AVG(accuracy), 0) AS accuracy,
               COALESCE(AVG(CASE WHEN ended_at > started_at THEN (ended_at - started_at) / 60000.0 END), 0) AS minutes,
-              COALESCE(SUM(chats > 0), 0) AS chat, COALESCE(SUM(voice_users > 0), 0) AS voice, COALESCE(SUM(reactions > 0), 0) AS react, COUNT(*) AS total
+              COALESCE(SUM(chats > 0), 0) AS chat, COALESCE(SUM(voice_users > 0), 0) AS voice, COALESCE(SUM(reactions > 0), 0) AS react, COUNT(*) AS total,
+              COALESCE(SUM(teams), 0) AS teams, COALESCE(SUM(power_ups), 0) AS powers, COALESCE(SUM(tv), 0) AS tv, COALESCE(SUM(quiz_id IS NOT NULL), 0) AS quizzes
        FROM game_events ${where}`,
     ).bind(r.from, r.to),
     db.prepare(`SELECT ${DOW('started_at')} AS dow, ${HOUR('started_at')} AS hour, COUNT(*) AS value FROM game_events ${where} GROUP BY dow, hour`).bind(r.from, r.to),
@@ -324,6 +326,7 @@ export async function games(env: Env, r: Range): Promise<GamesReport> {
     avgAccuracy: num(s.accuracy),
     avgMinutes: num(s.minutes),
     social: { chatGames: num(s.chat), voiceGames: num(s.voice), reactionGames: num(s.react), total: num(s.total) },
+    party: { teams: num(s.teams), powerUps: num(s.powers), tv: num(s.tv), quizzes: num(s.quizzes) },
     hours: heat(hours),
     features: ranked(features),
   }

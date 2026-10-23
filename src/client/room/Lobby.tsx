@@ -1,15 +1,16 @@
 import clsx from 'clsx'
-import { Check, Copy, Crown, Flame, Gauge, Headphones, Loader2, Lock, Play, QrCode, Share2, Sparkles, Sprout, UserX, Users, WifiOff } from 'lucide-react'
+import { ArrowLeftRight, Check, Copy, Crown, ExternalLink, Flame, Gauge, Headphones, Loader2, Lock, Play, QrCode, Share2, Shuffle, Sparkles, Sprout, Tv, UserX, Users, WifiOff } from 'lucide-react'
 import qrcode from 'qrcode-generator'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { GUESS_SECONDS_OPTIONS, REGIONS, ROUND_OPTIONS } from '../../shared/catalog'
 import type { Difficulty, Settings } from '../../shared/protocol'
 import { MAX_PLAYERS } from '../../shared/rules'
+import { POWER_IDS, POWERS, TEAM_IDS, TEAMS } from '../../shared/modes'
 import { useToast } from '../components/Toasts'
 import { Button, Card, PlayerAvatar, SectionTitle, Toggle } from '../components/ui'
 import { player as audio } from '../lib/audio'
-import { describeSource, DIFFICULTY_HINTS, difficultyLabel, GAME_MODES, gameMode } from '../lib/source'
+import { ANTAKSHARI_MODE, describeSource, DIFFICULTY_HINTS, difficultyLabel, GAME_MODES, gameMode } from '../lib/source'
 import { useRoomContext } from './context'
 import { ReactionBar } from './Reactions'
 import { SelectedSource, SourcePicker } from './SourcePicker'
@@ -47,10 +48,10 @@ function InviteCard() {
     <Card>
       <SectionTitle>Invite friends</SectionTitle>
       <p className="text-sm text-gray-400">Room code</p>
-      <p className="mb-4 font-mono text-4xl font-extrabold tracking-[0.3em] text-white" data-testid="room-code">
+      <p className="mb-3 font-mono text-4xl font-extrabold tracking-[0.3em] text-white sm:mb-4" data-testid="room-code">
         {state.code}
       </p>
-      <div className="mb-3 truncate rounded-xl border border-gray-700 bg-gray-800/80 px-3 py-2.5 text-sm text-gray-300" title={url}>
+      <div className="mb-3 hidden truncate rounded-xl border border-gray-700 bg-gray-800/80 px-3 py-2.5 text-sm text-gray-300 sm:block" title={url}>
         {url}
       </div>
       <div className="flex gap-2">
@@ -73,6 +74,139 @@ function InviteCard() {
           <img src={qrSrc} alt={`QR code to join room ${state.code}`} className="h-44 w-44 [image-rendering:pixelated]" />
         </div>
       )}
+    </Card>
+  )
+}
+
+/** Team battles: who's on Team Jai and who's on Team Veeru. Tap a team to switch; the host can move anyone or shuffle. */
+function TeamsCard() {
+  const { state, you, isHost, send } = useRoomContext()
+  const me = state.players.find((p) => p.id === you)
+  return (
+    <Card>
+      <SectionTitle
+        right={
+          isHost && (
+            <button type="button" onClick={() => send({ t: 'shuffleTeams' })} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-gray-300 hover:bg-white/10" data-testid="shuffle-teams">
+              <Shuffle className="h-3.5 w-3.5" /> Shuffle
+            </button>
+          )
+        }
+      >
+        Teams
+      </SectionTitle>
+      <div className="grid grid-cols-2 gap-2.5" data-testid="teams">
+        {TEAM_IDS.map((t) => {
+          const team = TEAMS[t]
+          const members = state.players.filter((p) => p.team === t)
+          return (
+            <div key={t} className={clsx('rounded-2xl p-2.5 ring-1', team.tile)} data-testid={`team-${t}`}>
+              <p className={clsx('mb-2 text-sm font-extrabold', team.text)}>
+                {team.emoji} {team.name}
+              </p>
+              <ul className="space-y-1.5">
+                {members.map((p) => (
+                  <li key={p.id} className="flex items-center gap-1.5">
+                    <PlayerAvatar avatar={p.avatar} photo={p.photo} name={p.name} size="sm" dim={!p.connected} />
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">
+                      {p.name}
+                      {p.id === you && <span className="font-normal text-gray-400"> (you)</span>}
+                    </span>
+                    {isHost && p.id !== you && (
+                      <button
+                        type="button"
+                        onClick={() => send({ t: 'team', team: t === 'a' ? 'b' : 'a', playerId: p.id })}
+                        aria-label={`Move ${p.name} to ${TEAMS[t === 'a' ? 'b' : 'a'].name}`}
+                        className="rounded p-1 text-gray-400 hover:bg-white/10 hover:text-white"
+                      >
+                        <ArrowLeftRight className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </li>
+                ))}
+                {members.length === 0 && <li className="text-xs text-gray-400">Nobody yet</li>}
+              </ul>
+              {me && me.team !== t && (
+                <button type="button" onClick={() => send({ t: 'team', team: t })} className="mt-2 w-full rounded-lg bg-white/10 py-1.5 text-xs font-bold text-white hover:bg-white/20" data-testid={`join-team-${t}`}>
+                  Join {team.name}
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      <p className="mt-3 text-xs text-gray-400">The team with the best average score per player wins, so uneven teams are fair.</p>
+    </Card>
+  )
+}
+
+/** Big-screen mode: open the game on a TV or laptop; phones become buzzers. */
+function TvCard() {
+  const { state } = useRoomContext()
+  const [copied, setCopied] = useState(false)
+  const url = `${location.origin}/tv/${state.code}`
+  return (
+    <Card className="relative overflow-hidden">
+      <div className="pointer-events-none absolute -right-10 -bottom-12 h-36 w-36 rounded-full bg-sky-500/15 blur-3xl" />
+      <div className="relative flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/15 text-sky-300">
+          <Tv className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-white">Play on a TV</p>
+          <p className="text-xs text-gray-400">
+            {state.displays > 0 ? (
+              <span className="font-semibold text-emerald-300" data-testid="tv-connected">📺 TV connected — phones are buzzers now.</span>
+            ) : (
+              <>Open this on a TV, laptop or projector: questions and music play there, phones become buzzers.</>
+            )}
+          </p>
+        </div>
+      </div>
+      <div className="relative mt-3 flex gap-2">
+        <a href={url} target="_blank" rel="noreferrer" className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-white/[0.06] text-sm font-semibold text-white ring-1 ring-white/10 hover:bg-white/[0.1]" data-testid="tv-link">
+          <ExternalLink className="h-4 w-4" /> Open TV screen
+        </a>
+        <button
+          type="button"
+          onClick={async () => {
+            await navigator.clipboard?.writeText(url).catch(() => undefined)
+            setCopied(true)
+            window.setTimeout(() => setCopied(false), 1800)
+          }}
+          className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-white/[0.06] px-3 text-sm font-semibold text-white ring-1 ring-white/10 hover:bg-white/[0.1]"
+          aria-label="Copy TV link"
+        >
+          {copied ? <Check className="h-4 w-4 text-emerald-300" /> : <Copy className="h-4 w-4" />}
+        </button>
+      </div>
+      <p className="relative mt-2 truncate text-[11px] text-gray-500">{url.replace(/^https?:\/\//, '')}</p>
+    </Card>
+  )
+}
+
+/** How Antakshari works, shown above the music picker. */
+function AntakshariCard() {
+  return (
+    <Card className="relative overflow-hidden">
+      <div className={clsx('pointer-events-none absolute inset-0 bg-linear-to-br opacity-70', ANTAKSHARI_MODE.tone)} />
+      <div className="relative">
+        <p className="text-xs font-bold tracking-[0.25em] text-emerald-200 uppercase">Antakshari</p>
+        <h2 className="mt-1 text-2xl font-black text-white sm:text-3xl">🎤 Gaana shuru karo!</h2>
+        <p className="mt-2 text-sm text-gray-200 sm:text-base">{ANTAKSHARI_MODE.how}</p>
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-sm font-bold" aria-hidden="true">
+          {['Tum Hi Ho', 'Hawayein', 'Naina', 'Nagada'].map((t, i, a) => (
+            <span key={t} className="inline-flex items-center gap-2">
+              <span className="rounded-xl bg-black/40 px-3 py-1.5 text-white ring-1 ring-white/10">
+                <span className="text-emerald-300">{t[0]}</span>
+                {t.slice(1)}
+              </span>
+              {i < a.length - 1 && <span className="text-emerald-300">→</span>}
+            </span>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-gray-300">Pick big music below (a Bollywood mix or a long playlist) so the chain can keep going.</p>
+      </div>
     </Card>
   )
 }
@@ -235,7 +369,7 @@ function SettingsCard() {
       <div className="grid gap-5 sm:grid-cols-2">
         <Segmented label={songs ? 'Songs' : 'Questions'} value={s.rounds} options={ROUND_OPTIONS} onChange={(rounds) => update({ rounds })} disabled={!isHost} />
         <Segmented label="Seconds to guess" value={s.guessSeconds} options={GUESS_SECONDS_OPTIONS} format={(v) => `${v}s`} onChange={(guessSeconds) => update({ guessSeconds })} disabled={!isHost} />
-        {songs && (
+        {songs && !s.antakshari && (
         <Segmented
           label="Guess the"
           value={s.answerType}
@@ -275,6 +409,24 @@ function SettingsCard() {
           />
         )}
         <Toggle label="Double final round" hint={songs ? 'Last song scores ×2' : 'Last question scores ×2'} checked={s.doubleFinal} disabled={!isHost} onChange={(doubleFinal) => update({ doubleFinal })} />
+      </div>
+      <div className="mt-5 grid gap-4 border-t border-gray-800 pt-5 sm:grid-cols-2">
+        <Toggle
+          label="⚡ Power-ups"
+          hint={`Everyone gets ${POWER_IDS.map((p) => `${POWERS[p].emoji} ${POWERS[p].name}`).join(', ')} — once each per game`}
+          checked={s.powerUps}
+          disabled={!isHost}
+          onChange={(powerUps) => update({ powerUps })}
+        />
+        {!state.solo && (
+          <Toggle
+            label="⚔️ Team battle"
+            hint={s.antakshari && songs ? 'Team Jai vs Team Veeru take turns; the other side can steal for half points' : 'Team Jai vs Team Veeru — the best average score wins'}
+            checked={s.teams}
+            disabled={!isHost}
+            onChange={(teams) => update({ teams })}
+          />
+        )}
       </div>
     </Card>
   )
@@ -387,12 +539,14 @@ function DailyIntro() {
 function GamePicker() {
   const { state, isHost, send } = useRoomContext()
   const current = state.settings.game
+  const antakshari = current === 'songs' && state.settings.antakshari
+  const modes = [...GAME_MODES.slice(0, 1), { ...ANTAKSHARI_MODE, id: 'antakshari' as const }, ...GAME_MODES.slice(1)]
   return (
     <Card>
       <SectionTitle right={!isHost && <span className="text-xs text-gray-500">Host picks</span>}>What are we playing?</SectionTitle>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" role="radiogroup" aria-label="Game">
-        {GAME_MODES.map((m) => {
-          const on = m.id === current
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 xl:grid-cols-5" role="radiogroup" aria-label="Game">
+        {modes.map((m) => {
+          const on = m.id === 'antakshari' ? antakshari : m.id === 'songs' ? current === 'songs' && !antakshari : m.id === current
           return (
             <button
               key={m.id}
@@ -400,7 +554,12 @@ function GamePicker() {
               role="radio"
               aria-checked={on}
               disabled={!isHost}
-              onClick={() => send({ t: 'settings', settings: { game: m.id } })}
+              onClick={() =>
+                send({
+                  t: 'settings',
+                  settings: m.id === 'antakshari' ? { game: 'songs', antakshari: true, answerType: 'title' } : { game: m.id, antakshari: false },
+                })
+              }
               data-testid={`mode-${m.id}`}
               className={clsx(
                 'group relative flex flex-col items-start overflow-hidden rounded-2xl border p-3.5 text-left transition-all disabled:cursor-default',
@@ -408,7 +567,7 @@ function GamePicker() {
               )}
             >
               <span className={clsx('pointer-events-none absolute inset-0 bg-linear-to-br transition-opacity', m.tone, on ? 'opacity-100' : 'opacity-0 group-hover:opacity-60')} />
-              <span className="relative mb-3 text-3xl drop-shadow-lg transition-transform group-hover:scale-110" aria-hidden="true">
+              <span className="relative mb-2 text-2xl drop-shadow-lg transition-transform group-hover:scale-110 sm:mb-3 sm:text-3xl" aria-hidden="true">
                 {m.emoji}
               </span>
               <span className="relative block font-extrabold text-white">{m.title}</span>
@@ -464,7 +623,7 @@ export function Lobby() {
   useEffect(() => audio.stop(), [])
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 pb-28 lg:pb-10">
+    <main className="mx-auto w-full max-w-6xl px-3 pb-28 sm:px-4 lg:pb-10">
       {state.group && (
         <div className="mb-4 flex items-center gap-2 rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 px-4 py-3 text-sm text-fuchsia-100">
           <Users className="h-4 w-4 shrink-0" />
@@ -481,13 +640,14 @@ export function Lobby() {
           {state.notice}
         </div>
       )}
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="order-2 space-y-6 lg:order-1">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="order-2 min-w-0 space-y-4 sm:space-y-6 lg:order-1">
           {state.daily ? (
             <DailyIntro />
           ) : (
           <>
           <GamePicker />
+          {state.settings.game === 'songs' && state.settings.antakshari && <AntakshariCard />}
           {state.settings.game === 'songs' ? (
             <Card>
               <SectionTitle>{isHost ? 'Choose the music' : 'Music'}</SectionTitle>
@@ -508,13 +668,14 @@ export function Lobby() {
           )}
           {!state.daily && <SettingsCard />}
         </div>
-        <aside className="order-1 space-y-6 lg:order-2">
+        <aside className="order-1 min-w-0 space-y-4 sm:space-y-6 lg:order-2">
           {state.solo ? (
             <SoloCard />
           ) : (
             <>
               <InviteCard />
-              <PlayersCard />
+              {state.settings.teams ? <TeamsCard /> : <PlayersCard />}
+              <TvCard />
             </>
           )}
           <StartBar />
