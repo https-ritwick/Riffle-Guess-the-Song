@@ -18,6 +18,7 @@ import { RoomContext, type RoomContextValue } from '../room/context'
 import { ChallengeStage, Equalizer, isChallengeMode, OPTION_STYLES, useEmojiSong, useRoundAudio, VinylStage } from '../room/GameView'
 import { AnimatedNumber, rankPlayers } from '../room/Scoreboard'
 import { TeamStandings } from '../room/Teams'
+import { useTeamLabels } from '../lib/teams'
 
 function JoinQr({ code, size = 8 }: { code: string; size?: number }) {
   const url = `${location.origin}/r/${code}`
@@ -49,6 +50,7 @@ function TopBar({ state }: { state: PublicState }) {
 }
 
 function Lobby({ state }: { state: PublicState }) {
+  const labels = useTeamLabels(state.settings)
   const game = describeGame(state.settings)
   const players = state.players.filter((p) => p.connected)
   const host = state.players.find((p) => p.id === state.hostId)
@@ -85,7 +87,7 @@ function Lobby({ state }: { state: PublicState }) {
               {TEAM_IDS.map((t) => (
                 <div key={t} className={clsx('rounded-3xl p-5 ring-1', TEAMS[t].tile)}>
                   <p className={clsx('mb-4 text-3xl font-black', TEAMS[t].text)}>
-                    {TEAMS[t].emoji} {TEAMS[t].name}
+                    {labels[t].emoji} {labels[t].name}
                   </p>
                   <PlayerGrid players={players.filter((p) => p.team === t)} />
                 </div>
@@ -187,6 +189,7 @@ function Leaders({ state }: { state: PublicState }) {
 }
 
 function Game({ state, serverNow }: { state: PublicState; serverNow: () => number }) {
+  const labels = useTeamLabels(state.settings)
   const round = state.round!
   const phase = state.phase
   const now = useNow(serverNow, 100)
@@ -233,7 +236,7 @@ function Game({ state, serverNow }: { state: PublicState; serverNow: () => numbe
           )}
           {round.turn && phase !== 'reveal' && (
             <p className={clsx('rounded-2xl px-4 py-2 text-2xl font-bold', TEAMS[round.turn].bg, TEAMS[round.turn].text)}>
-              {TEAMS[round.turn].emoji} {TEAMS[round.turn].name}’s turn
+              {labels[round.turn].emoji} {labels[round.turn].name}’s turn
             </p>
           )}
           <div className="ml-auto">{phase === 'question' && <Equalizer active={playing} className="h-8" />}</div>
@@ -270,6 +273,7 @@ function Game({ state, serverNow }: { state: PublicState; serverNow: () => numbe
 }
 
 function Results({ state }: { state: PublicState }) {
+  const labels = useTeamLabels(state.settings)
   const ranked = rankPlayers(state.players)
   const podium = [ranked[1], ranked[0], ranked[2]]
   return (
@@ -277,7 +281,7 @@ function Results({ state }: { state: PublicState }) {
       <p className="text-6xl font-black text-white">Game complete! 🎉</p>
       {state.teams && state.teams[0] && (
         <p className={clsx('rounded-3xl px-8 py-4 text-5xl font-black', TEAMS[state.teams[0].id].bg, TEAMS[state.teams[0].id].text)}>
-          {state.teams[1] && state.teams[0].score === state.teams[1].score ? '🤝 It’s a tie!' : `${TEAMS[state.teams[0].id].emoji} ${TEAMS[state.teams[0].id].name} wins!`}
+          {state.teams[1] && state.teams[0].score === state.teams[1].score ? '🤝 It’s a tie!' : `${labels[state.teams[0].id].emoji} ${labels[state.teams[0].id].name} wins!`}
         </p>
       )}
       <div className="flex items-end justify-center gap-8">

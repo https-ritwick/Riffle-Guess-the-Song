@@ -269,3 +269,17 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Talking in the voice channel: a pulsing green halo around the avatar. */
+.talking-glow {
+  border-radius: 9999px;
+  animation: talking 0.7s ease-in-out infinite alternate;
+}
+@keyframes talking {
+  from {
+    box-shadow: 0 0 0 2px #34d399, 0 0 8px 1px rgb(52 211 153 / 0.45);
+  }
+  to {
+    box-shadow: 0 0 0 3px #6ee7b7, 0 0 22px 6px rgb(52 211 153 / 0.85);
+  }
+}

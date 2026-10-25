@@ -6,7 +6,7 @@ import { Shell } from '../components/Shell'
 import { Toggle } from '../components/ui'
 import { analyticsEnabled, browserBlocksAnalytics, setAnalyticsEnabled } from '../lib/track'
 
-const UPDATED = '24 October 2026'
+const UPDATED = '25 October 2026'
 const MAIL = <a href={`mailto:${BRAND.email}`} className="text-brand-300 underline-offset-2 hover:underline">{BRAND.email}</a>
 
 function Doc({ title, intro, toc, children }: { title: string; intro: ReactNode; toc: { id: string; label: string }[]; children: ReactNode }) {
@@ -160,8 +160,8 @@ export function PrivacyPage() {
             <strong className="text-gray-100">Chat messages and stickers</strong> you send in a room. They’re shown to everyone in the room and kept with the room until it’s deleted.
           </li>
           <li>
-            <strong className="text-gray-100">Voice</strong>: the voice channel connects players directly (peer to peer). We don’t record or store audio. If a direct connection isn’t possible, the encrypted
-            audio may be relayed through Cloudflare’s servers.
+            <strong className="text-gray-100">Voice</strong>: the voice channel connects players directly (peer to peer) when their networks allow it. When they don’t, your voice is passed through
+            {BRAND.name}’s servers on Cloudflare to the other players in the voice channel, live. We never record or store audio either way.
           </li>
           <li>
             <strong className="text-gray-100">Playlists you paste</strong> (Spotify or Apple Music links) to fetch their song list.

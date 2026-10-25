@@ -164,14 +164,18 @@ function SoundBlockedBanner() {
 
 function RoomView({ code }: { code: string }) {
   const room = useRoom(code)
-  const { status, state, you, error, send, join, leave, serverNow, reactions, wantsSeat, suggestion, chat, seat, onRtc } = room
+  const { status, state, you, error, send, join, leave, serverNow, reactions, wantsSeat, suggestion, chat, seat, onRtc, onRelay, sendBinary } = room
   const [joining, setJoining] = useState(false)
   const { features } = useSite()
-  const { voice, snapshot: voiceState, onSignal } = useVoice(send, you, state?.players, seat)
+  const { voice, snapshot: voiceState, onSignal, onRelay: onVoicePacket } = useVoice(send, you, state?.players, seat, sendBinary)
   useEffect(() => {
     onRtc(onSignal)
-    return () => onRtc(null)
-  }, [onRtc, onSignal])
+    onRelay(onVoicePacket)
+    return () => {
+      onRtc(null)
+      onRelay(null)
+    }
+  }, [onRtc, onSignal, onRelay, onVoicePacket])
   const toast = useToast()
 
   // Host: friends can suggest music; one tap applies it.
@@ -223,8 +227,9 @@ function RoomView({ code }: { code: string }) {
       send,
       serverNow,
       leave,
+      speaking: voiceState.speaking,
     }
-  }, [state, you, send, serverNow, leave])
+  }, [state, you, send, serverNow, leave, voiceState.speaking])
 
   if (status === 'missing') {
     return <Message title="Room not found" body={`There’s no game with the code ${code}. It may have expired — rooms close after a few hours of inactivity.`} />

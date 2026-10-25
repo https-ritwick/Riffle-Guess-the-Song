@@ -25,28 +25,70 @@ test('power-ups and team battle', async ({ browser }) => {
   await host.page.getByTestId('shuffle-teams').click()
   await expect(host.page.getByTestId('team-a').getByText(/Asha|Kabir/)).toHaveCount(1)
 
-  await startFive(host.page)
+  // The host renames a team; everyone sees the new name.
+  await host.page.getByTestId('rename-team-a').click()
+  await host.page.getByTestId('team-name-input-a').fill('Rockstars')
+  await host.page.getByTestId('team-name-input-a').press('Enter')
+  await expect(guest.page.getByTestId('team-name-a')).toContainText('Rockstars')
 
-  // Round 1: a 50-50 takes two wrong answers away.
+  // All seven power-ups are offered; the host can switch one off.
+  await expect(host.page.getByTestId('power-picker').locator('button')).toHaveCount(7)
+  await host.page.getByTestId('pick-power-peek').click()
+  await expect(host.page.getByTestId('pick-power-peek')).toHaveAttribute('aria-pressed', 'false')
+
+  await startFive(host.page)
+  const options = async () => (await host.page.getByTestId('choices').locator('button').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label') ?? ''))).map((l) => l.replace(/^[A-D]: /, ''))
+  const finishRound = async (round: number) => {
+    await guest.page.getByTestId('choices').locator('button').first().click()
+    await expect(host.page.getByTestId('reveal-title')).toBeVisible()
+    await expect(host.page.getByTestId('round-number')).toHaveText(String(round + 1), { timeout: 20_000 })
+  }
+
+  // Round 1: a 50-50 takes two wrong answers away. Crowd peek was switched off.
   await expect(host.page.getByTestId('choices').locator('button').first()).toBeEnabled()
+  await expect(host.page.getByTestId('power-peek')).toHaveCount(0)
   await host.page.getByTestId('power-fifty').click()
   await expect(host.page.getByTestId('choices').locator('button[aria-label$="(removed)"]')).toHaveCount(2)
   await expect(host.page.getByTestId('power-fifty')).toHaveAttribute('aria-pressed', 'true')
   await host.page.getByTestId('choices').locator('button:not([disabled])').first().click()
+  await finishRound(1)
+
+  // Round 2: the 50-50 is used up; a Hint shows the first letter.
+  await expect(host.page.getByTestId('power-fifty')).toBeDisabled()
+  await host.page.getByTestId('power-hint').click()
+  await expect(host.page.getByTestId('power-note')).toContainText('Hint: starts with')
+  await host.page.getByTestId('choices').locator('button').first().click()
+  await finishRound(2)
+
+  // Round 3: Second chance — a wrong first pick only takes that option away.
+  await expect(host.page.getByTestId('choices').locator('button').first()).toBeEnabled()
+  await host.page.getByTestId('power-retry').click()
+  const playing = host.currentSong()
+  const texts = await options()
+  await host.page.getByTestId('choices').locator('button').nth(texts.findIndex((t) => t !== playing)).click()
+  await expect(host.page.getByTestId('power-note')).toContainText('second chance')
+  await expect(host.page.getByTestId('choices').locator('button[aria-label$="(removed)"]')).toHaveCount(1)
+  await host.page.getByTestId('choices').locator('button').nth(texts.indexOf(playing!)).click()
+  await expect(host.page.getByTestId('team-standings')).toBeVisible()
   await guest.page.getByTestId('choices').locator('button').first().click()
   await expect(host.page.getByTestId('reveal-title')).toBeVisible()
 
-  // Round 2: the 50-50 is used up; Double is still there.
-  await expect(host.page.getByTestId('round-number')).toHaveText('2', { timeout: 20_000 })
-  await expect(host.page.getByTestId('power-fifty')).toBeDisabled()
-  await host.page.getByTestId('power-double').click()
-  await expect(host.page.getByTestId('power-double')).toHaveAttribute('aria-pressed', 'true')
-  await expect(host.page.getByTestId('team-standings')).toBeVisible()
-
-  await host.page.getByRole('button', { name: 'End game' }).click({ trial: true })
   host.page.once('dialog', (d) => void d.accept())
   await host.page.getByRole('button', { name: 'End game' }).click()
+  // The recap ("That's a wrap") has a team battle slide.
+  await expect(host.page.getByTestId('recap')).toBeVisible()
+  for (let i = 0; i < 12 && !(await host.page.getByTestId('recap-team').count()); i++) await host.page.keyboard.press('ArrowRight')
+  await expect(host.page.getByTestId('recap-team')).toBeVisible()
+  await expect(host.page.getByTestId('recap')).toContainText(/wins!|tie/)
+  await host.page.keyboard.press('Space')
+  await host.page.keyboard.press('ArrowLeft')
+  await host.page.mouse.move(640, 360)
+  await host.page.mouse.down()
+  await host.page.waitForTimeout(1500)
+  await host.page.screenshot({ path: 'test-screens/recap-team.png' })
+  await host.page.mouse.up()
   await skipRecap(host.page)
+  await expect(host.page.getByTestId('winner-line')).toContainText(/wins!|tied/)
   await expect(host.page.getByTestId('team-result')).toContainText(/wins!|tie/)
   await host.page.screenshot({ path: 'test-screens/teams-results.png', fullPage: true })
 })

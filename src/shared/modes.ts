@@ -1,25 +1,49 @@
 // Power-ups, team battles and Antakshari: rules shared by the room server and the UI.
 import { closeness, sameSongVariant, shuffle, type Question, type Random } from './questions'
+import { z } from 'zod'
 import { cleanTitle, compareKey } from './text'
 import type { Difficulty, Track } from './protocol'
 
 // ---------------------------------------------------------------------------
-// Power-ups: each player gets one of each per game (when the host turns them on).
+// Power-ups: each player gets one of each per game (when the host turns them on),
+// one per round, used before answering. The host picks which ones are in play.
 
-export const POWER_IDS = ['fifty', 'double', 'shield'] as const
+export const POWER_IDS = ['fifty', 'double', 'shield', 'hint', 'retry', 'rob', 'peek'] as const
 export type PowerId = (typeof POWER_IDS)[number]
 
-export const POWERS: Record<PowerId, { emoji: string; name: string; hint: string }> = {
-  fifty: { emoji: '✂️', name: '50-50', hint: 'Removes two wrong answers' },
-  double: { emoji: '💰', name: 'Double', hint: 'This answer scores ×2' },
-  shield: { emoji: '🛡️', name: 'Shield', hint: 'A wrong answer costs nothing and keeps your streak' },
+export const POWERS: Record<PowerId, { name: string; hint: string; /** Needs other players in the room. */ rivals?: boolean }> = {
+  fifty: { name: '50-50', hint: 'Removes two wrong answers' },
+  double: { name: 'Double', hint: 'A right answer scores ×2' },
+  shield: { name: 'Shield', hint: 'A wrong answer costs nothing and keeps your streak' },
+  hint: { name: 'Hint', hint: 'Shows the first letter of the answer (and the year for songs)' },
+  retry: { name: 'Second chance', hint: 'If your first answer is wrong, pick again for half points' },
+  rob: { name: 'Robin Hood', hint: 'A right answer also takes 150 points from the leader', rivals: true },
+  peek: { name: 'Crowd peek', hint: 'See how many players picked each answer so far', rivals: true },
 }
 
+/** Robin Hood takes up to this many points from the leader. */
+export const ROB_POINTS = 150
+/** A right answer after a Second chance scores this share. */
+export const RETRY_SHARE = 0.5
+
 // ---------------------------------------------------------------------------
-// Team battles: two teams, named after Sholay's Jai and Veeru.
+// Team battles: two teams. Names default to Sholay's Jai and Veeru; the admin can
+// change the defaults and the host can rename them for a room.
 
 export const TEAM_IDS = ['a', 'b'] as const
 export type TeamId = (typeof TEAM_IDS)[number]
+
+export const TeamNameSchema = z.string().trim().min(1, 'Give the team a name').max(24)
+
+export interface TeamLabel {
+  name: string
+  emoji: string
+}
+
+export const DEFAULT_TEAM_LABELS: Record<TeamId, TeamLabel> = {
+  a: { name: 'Team Jai', emoji: '🔥' },
+  b: { name: 'Team Veeru', emoji: '💧' },
+}
 
 /** Tailwind classes are spelled out in full so the CSS build finds them. */
 export const TEAMS: Record<TeamId, { name: string; emoji: string; color: string; tile: string; bg: string; text: string; bar: string }> = {

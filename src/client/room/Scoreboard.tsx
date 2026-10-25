@@ -3,6 +3,8 @@ import { ArrowDown, ArrowUp, ChevronDown, Crown } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Phase, PublicPlayer } from '../../shared/protocol'
 import { PlayerAvatar } from '../components/ui'
+import { useTeamLabels } from '../lib/teams'
+import { useRoomContext } from './context'
 import { TEAMS } from '../../shared/modes'
 
 /** Animates a number from its previous value (score count-up). */
@@ -41,6 +43,8 @@ export function rankPlayers(players: PublicPlayer[]): PublicPlayer[] {
  */
 export function Scoreboard({ players, you, hostId, phase }: { players: PublicPlayer[]; you: string; hostId: string | null; phase: Phase }) {
   const ranked = rankPlayers(players)
+  const { speaking, state } = useRoomContext()
+  const labels = useTeamLabels(state.settings)
   const rows = useRef(new Map<string, HTMLLIElement>())
   const lastTops = useRef(new Map<string, number>())
   const lastRanks = useRef(new Map<string, number>())
@@ -114,7 +118,7 @@ export function Scoreboard({ players, you, hostId, phase }: { players: PublicPla
                 {rank + 1}
               </span>
               <span className="relative">
-                <PlayerAvatar avatar={p.avatar} photo={p.photo} name={p.name} size="sm" />
+                <PlayerAvatar avatar={p.avatar} photo={p.photo} name={p.name} size="sm" speaking={!!speaking?.has(p.id)} />
                 {rank === 0 && p.score > 0 && <Crown className="absolute -top-2.5 -right-1.5 h-3.5 w-3.5 rotate-12 text-amber-300" />}
                 {showPoints && p.first && (
                   <span className="absolute -right-1.5 -bottom-1 flex h-4 w-4 animate-pop items-center justify-center rounded-full bg-amber-400 text-[9px] ring-2 ring-gray-950" title="First right answer">
@@ -124,7 +128,7 @@ export function Scoreboard({ players, you, hostId, phase }: { players: PublicPla
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1">
-                  {p.team && <span className={clsx('h-2 w-2 shrink-0 rounded-full', TEAMS[p.team].bar)} title={TEAMS[p.team].name} />}
+                  {p.team && <span className={clsx('h-2 w-2 shrink-0 rounded-full', TEAMS[p.team].bar)} title={labels[p.team].name} />}
                   <span className="truncate text-sm font-semibold text-white">{p.name}</span>
                   {p.id === hostId && <span className="text-[10px]">👑</span>}
                   {p.streak >= 2 && <span className="text-xs text-orange-300">🔥{p.streak}</span>}

@@ -2,6 +2,12 @@
 // (audio only, peer to peer). Offers, answers and ICE candidates travel over the
 // room's WebSocket. Joining only listens; the microphone is opened when you
 // unmute and closed again when you mute, so the browser's mic light is honest.
+//
+// Phones on mobile data or strict Wi-Fi often can't connect directly. For those
+// pairs the voice goes through the room's own WebSocket instead (the relay): the
+// mic is cut into 60 ms packets of 16 kHz μ-law audio, the room server forwards
+// them, and listeners play them with a small jitter buffer. It works anywhere the
+// game itself works, so nobody is ever left unable to hear.
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import type { ClientMessage, PublicPlayer } from '../../shared/protocol'
 
@@ -22,8 +28,10 @@ export interface VoiceSnapshot {
   speaking: ReadonlySet<string>
   /** Player ids we have a working audio connection with. */
   connected: ReadonlySet<string>
-  /** Player ids we couldn't connect to for a while (usually strict mobile networks without a relay). */
+  /** Player ids we couldn't connect to directly for a while (their voice comes through the relay). */
   unreachable: ReadonlySet<string>
+  /** Player ids we're hearing through the relay right now. */
+  relayed: ReadonlySet<string>
 }
 
 const FALLBACK_ICE: RTCIceServer[] = [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] }]
@@ -37,6 +45,36 @@ const UNREACHABLE_MS = 10_000
 /** Players we can play at once without a fresh tap (phones only let audio start from a tap). */
 const AUDIO_POOL = 10
 const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
+
+// Relay audio: 16 kHz μ-law packets of 60 ms (see public/voice-worklet.js).
+const RELAY_RATE = 16000
+const RELAY_CODEC = 1
+/** Keep sending this long after the voice drops below the speaking level, so word endings aren't cut. */
+const RELAY_HANGOVER_MS = 400
+const RELAY_GATE = 0.012
+/** Listener jitter buffer, and how far behind we let a speaker drift before catching up. */
+const RELAY_BUFFER_S = 0.14
+const RELAY_MAX_LAG_S = 0.6
+
+const MU_LAW = (() => {
+  const t = new Float32Array(256)
+  for (let i = 0; i < 256; i++) {
+    const u = ~i & 0xff
+    const sign = u & 0x80
+    const exponent = (u >> 4) & 0x07
+    const mantissa = u & 0x0f
+    const s = (((mantissa << 3) + 0x84) << exponent) - 0x84
+    t[i] = (sign ? -s : s) / 32768
+  }
+  return t
+})()
+
+interface RelayListener {
+  gain: GainNode
+  next: number
+  speakingUntil: number
+  heardAt: number
+}
 
 interface Peer {
   id: string
@@ -68,11 +106,19 @@ export class VoiceChannel {
   private ctx: AudioContext | null = null
   private meterTimer: number | undefined
   private listeners = new Set<() => void>()
-  private snapshot: VoiceSnapshot = { joined: false, muted: true, opening: false, micError: null, speaking: new Set(), connected: new Set(), unreachable: new Set() }
+  private snapshot: VoiceSnapshot = { joined: false, muted: true, opening: false, micError: null, speaking: new Set(), connected: new Set(), unreachable: new Set(), relayed: new Set() }
+  /** Everyone else in the voice channel right now. */
+  private others = new Set<string>()
+  private capture: { node: AudioNode; source: MediaStreamAudioSourceNode } | null = null
+  private loudUntil = 0
+  private listeners_ = new Map<string, RelayListener>()
   /** Audio elements unlocked during a tap, so every voice can play at once on phones (iOS blocks audio started later). */
   private pool: HTMLAudioElement[] = []
 
-  constructor(private send: (msg: ClientMessage) => boolean) {}
+  constructor(
+    private send: (msg: ClientMessage) => boolean,
+    private sendBinary: (data: Uint8Array) => boolean = () => false,
+  ) {}
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn)
@@ -111,9 +157,12 @@ export class VoiceChannel {
     for (const id of [...this.peers.keys()]) this.closePeer(id)
     this.helloAt.clear()
     this.closeMic()
+    for (const l of this.listeners_.values()) l.gain.disconnect()
+    this.listeners_.clear()
+    this.others.clear()
     clearInterval(this.meterTimer)
     this.meterTimer = undefined
-    this.update({ joined: false, muted: true, opening: false, speaking: new Set(), connected: new Set(), unreachable: new Set() })
+    this.update({ joined: false, muted: true, opening: false, speaking: new Set(), connected: new Set(), unreachable: new Set(), relayed: new Set() })
   }
 
   async setMuted(muted: boolean) {
@@ -140,6 +189,7 @@ export class VoiceChannel {
       }
       this.mic = stream
       this.micMeter = this.meterFor(stream)
+      void this.startCapture(stream)
       const track = stream.getAudioTracks()[0] ?? null
       for (const peer of this.peers.values()) void this.senderOf(peer.pc)?.replaceTrack(track)
       this.update({ muted: false, opening: false })
@@ -157,6 +207,7 @@ export class VoiceChannel {
   sync(players: PublicPlayer[]) {
     if (!this.snapshot.joined || !this.you) return
     const others = new Set(players.filter((p) => p.id !== this.you && p.connected && p.voice).map((p) => p.id))
+    this.others = others
     for (const id of [...this.peers.keys()]) if (!others.has(id)) this.closePeer(id)
     for (const id of [...this.helloAt.keys()]) if (!others.has(id)) this.helloAt.delete(id)
     for (const id of this.snapshot.unreachable) if (!others.has(id)) this.markUnreachable(id, false)
@@ -306,6 +357,119 @@ export class VoiceChannel {
     }
   }
 
+/** Relay packet from the room: [id length][player id][codec][μ-law samples]. */
+  handleRelay(buf: ArrayBuffer) {
+    if (!this.snapshot.joined) return
+    const bytes = new Uint8Array(buf)
+    const len = bytes[0] ?? 0
+    if (bytes.length < len + 3) return
+    const from = String.fromCharCode(...bytes.subarray(1, 1 + len))
+    if (bytes[1 + len] !== RELAY_CODEC || from === this.you) return
+    // A working direct connection already carries this voice.
+    if (this.snapshot.connected.has(from)) return
+    const ctx = this.audioContext()
+    if (!ctx) return
+    const payload = bytes.subarray(2 + len)
+    const samples = new Float32Array(payload.length)
+    let sum = 0
+    for (let i = 0; i < payload.length; i++) {
+      const v = MU_LAW[payload[i]!]!
+      samples[i] = v
+      sum += v * v
+    }
+    let l = this.listeners_.get(from)
+    if (!l) {
+      const gain = ctx.createGain()
+      gain.connect(ctx.destination)
+      l = { gain, next: 0, speakingUntil: 0, heardAt: 0 }
+      this.listeners_.set(from, l)
+    }
+    const now = ctx.currentTime
+    // Start (or restart after a gap) a little in the future to absorb network jitter; drop backlog.
+    if (l.next < now + 0.02 || l.next > now + RELAY_MAX_LAG_S) l.next = now + RELAY_BUFFER_S
+    const buffer = ctx.createBuffer(1, samples.length, RELAY_RATE)
+    buffer.copyToChannel(samples, 0)
+    const src = ctx.createBufferSource()
+    src.buffer = buffer
+    src.connect(l.gain)
+    src.start(l.next)
+    l.next += buffer.duration
+    l.heardAt = Date.now()
+    if (Math.sqrt(sum / samples.length) > SPEAKING_LEVEL) l.speakingUntil = Date.now() + 300
+  }
+
+  /** Someone in the channel can't hear us directly, so our voice also goes through the relay. */
+  private needsRelay(): boolean {
+    for (const id of this.others) if (!this.snapshot.connected.has(id)) return true
+    return false
+  }
+
+  private async startCapture(stream: MediaStream) {
+    const ctx = this.audioContext()
+    if (!ctx || this.capture) return
+    const source = ctx.createMediaStreamSource(stream)
+    const onFrame = (rms: number, data: Uint8Array) => {
+      if (this.snapshot.muted || !this.needsRelay()) return
+      if (rms > RELAY_GATE) this.loudUntil = Date.now() + RELAY_HANGOVER_MS
+      if (Date.now() > this.loudUntil) return
+      const packet = new Uint8Array(data.length + 1)
+      packet[0] = RELAY_CODEC
+      packet.set(data, 1)
+      this.sendBinary(packet)
+    }
+    try {
+      await ctx.audioWorklet.addModule('/voice-worklet.js')
+      if (this.mic !== stream) return
+      const node = new AudioWorkletNode(ctx, 'riffle-mic', { numberOfInputs: 1, numberOfOutputs: 0 })
+      node.port.onmessage = (e: MessageEvent<{ rms: number; data: Uint8Array }>) => onFrame(e.data.rms, e.data.data)
+      source.connect(node)
+      this.capture = { node, source }
+    } catch {
+      // Older browsers: do the same on the main thread.
+      if (this.mic !== stream) return
+      const node = ctx.createScriptProcessor(4096, 1, 1)
+      const ratio = ctx.sampleRate / RELAY_RATE
+      let frame: number[] = []
+      let pos = 0
+      let acc = 0
+      let count = 0
+      node.onaudioprocess = (e) => {
+        const ch = e.inputBuffer.getChannelData(0)
+        for (let i = 0; i < ch.length; i++) {
+          acc += ch[i]!
+          count++
+          if (++pos >= ratio) {
+            pos -= ratio
+            frame.push(acc / count)
+            acc = 0
+            count = 0
+            if (frame.length === 960) {
+              const data = new Uint8Array(960)
+              let sum = 0
+              frame.forEach((v, j) => {
+                sum += v * v
+                data[j] = encodeMuLaw(v)
+              })
+              onFrame(Math.sqrt(sum / 960), data)
+              frame = []
+            }
+          }
+        }
+      }
+      source.connect(node)
+      // A script processor only runs while connected to the output; it writes silence.
+      node.connect(ctx.destination)
+      this.capture = { node, source }
+    }
+  }
+
+  private stopCapture() {
+    if (!this.capture) return
+    this.capture.source.disconnect()
+    this.capture.node.disconnect()
+    this.capture = null
+  }
+
   private markUnreachable(id: string, on: boolean) {
     if (this.snapshot.unreachable.has(id) === on) return
     const unreachable = new Set(this.snapshot.unreachable)
@@ -349,6 +513,7 @@ export class VoiceChannel {
   }
 
   private closeMic() {
+    this.stopCapture()
     if (!this.mic) return
     for (const peer of this.peers.values()) void this.senderOf(peer.pc)?.replaceTrack(null)
     this.mic.getTracks().forEach((t) => t.stop())
@@ -388,10 +553,27 @@ export class VoiceChannel {
       const speaking = new Set<string>()
       if (!this.snapshot.muted && this.micMeter && this.micMeter() > SPEAKING_LEVEL) speaking.add(this.you)
       for (const peer of this.peers.values()) if (peer.meter && peer.meter() > SPEAKING_LEVEL) speaking.add(peer.id)
-      const prev = this.snapshot.speaking
-      if (speaking.size !== prev.size || [...speaking].some((id) => !prev.has(id))) this.update({ speaking })
+      const now = Date.now()
+      const relayed = new Set<string>()
+      for (const [id, l] of this.listeners_) {
+        if (l.speakingUntil > now) speaking.add(id)
+        if (now - l.heardAt < 3000) relayed.add(id)
+      }
+      const same = (a: ReadonlySet<string>, b: ReadonlySet<string>) => a.size === b.size && [...a].every((id) => b.has(id))
+      if (!same(speaking, this.snapshot.speaking)) this.update({ speaking })
+      if (!same(relayed, this.snapshot.relayed)) this.update({ relayed })
     }, 150)
   }
+}
+
+function encodeMuLaw(x: number): number {
+  let s = Math.max(-1, Math.min(1, x)) * 32767
+  const sign = s < 0 ? 0x80 : 0
+  if (sign) s = -s
+  s = Math.min(s, 32635) + 0x84
+  let exponent = 7
+  for (let mask = 0x4000; (s & mask) === 0 && exponent > 0; mask >>= 1) exponent--
+  return ~(sign | (exponent << 4) | ((s >> (exponent + 3)) & 0x0f)) & 0xff
 }
 
 /** One voice channel per room screen, kept in step with the room's players. */
@@ -401,9 +583,10 @@ export function useVoice(
   players: PublicPlayer[] | undefined,
   /** Changes whenever the server seats us again (it forgets the voice channel on a reconnect). */
   seat: number,
+  sendBinary?: (data: Uint8Array) => boolean,
 ) {
   const ref = useRef<VoiceChannel | null>(null)
-  ref.current ??= new VoiceChannel(send)
+  ref.current ??= new VoiceChannel(send, sendBinary)
   const voice = ref.current
   const snapshot = useSyncExternalStore(voice.subscribe, voice.getSnapshot)
 
@@ -420,5 +603,6 @@ export function useVoice(
   }, [voice, players])
 
   const onSignal = useCallback((from: string, data: string) => void voice.handleSignal(from, data), [voice])
-  return { voice, snapshot, onSignal }
+  const onRelay = useCallback((buf: ArrayBuffer) => voice.handleRelay(buf), [voice])
+  return { voice, snapshot, onSignal, onRelay }
 }

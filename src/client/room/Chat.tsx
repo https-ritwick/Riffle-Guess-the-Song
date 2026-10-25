@@ -136,8 +136,8 @@ function VoiceRoster({ players, snapshot, you }: { players: PublicPlayer[]; snap
         const linking = snapshot.joined && p.id !== you && !snapshot.connected.has(p.id)
         return (
           <li key={p.id} className="flex flex-col items-center gap-1" title={`${p.name}${p.voice === 'muted' ? ' (muted)' : ''}`}>
-            <span className={clsx('relative rounded-full ring-2 transition', talking ? 'ring-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.7)]' : 'ring-transparent', linking && 'opacity-50')}>
-              <PlayerAvatar avatar={p.avatar} photo={p.photo} name={p.name} size="sm" />
+            <span className={clsx('relative rounded-full transition', linking && !snapshot.relayed.has(p.id) && 'opacity-50')}>
+              <PlayerAvatar avatar={p.avatar} photo={p.photo} name={p.name} size="sm" speaking={talking} />
               {p.voice === 'muted' && (
                 <span className="absolute -right-1 -bottom-1 flex h-4 w-4 items-center justify-center rounded-full bg-gray-900 ring-1 ring-white/20">
                   <MicOff className="h-2.5 w-2.5 text-red-300" />
@@ -303,9 +303,9 @@ export function ChatDock({ messages, voice, snapshot, raised }: { messages: Chat
               </div>
               <VoiceRoster players={state.players} snapshot={snapshot} you={you} />
               {snapshot.micError && <p className="mt-2 text-xs text-amber-300">{snapshot.micError}</p>}
-              {snapshot.joined && snapshot.unreachable.size > 0 && (
-                <p className="mt-2 text-xs text-amber-300" data-testid="voice-unreachable">
-                  Can’t reach {state.players.filter((p) => snapshot.unreachable.has(p.id)).map((p) => p.name).join(', ')} — their network is blocking voice. Switching to Wi-Fi usually helps.
+              {snapshot.joined && snapshot.relayed.size > 0 && (
+                <p className="mt-2 text-[11px] text-gray-400" data-testid="voice-relayed">
+                  Using backup voice for {state.players.filter((p) => snapshot.relayed.has(p.id)).map((p) => p.name).join(', ')} (their network blocks direct calls).
                 </p>
               )}
               {snapshot.joined && <p className="mt-2 text-[11px] text-gray-500">🎧 Earphones let everyone talk at once without echo.</p>}

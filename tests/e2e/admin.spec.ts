@@ -96,3 +96,29 @@ test('new accounts are asked their age and gender once', async ({ page }) => {
   await expect(page.getByText('Name the song before your friends do.')).toBeVisible()
   await expect(dialog).toHaveCount(0)
 })
+
+test('admin sets the default team names for team battles', async ({ page, browser }) => {
+  await devSignIn(page, 'Owner', ADMIN)
+  await page.goto('/admin/settings')
+  await page.getByTestId('admin-team-a').fill('Team Mumbai')
+  await page.getByTestId('admin-team-b').fill('Team Delhi')
+  await page.getByTestId('team-names-settings').locator('xpath=ancestor::section[1]').getByRole('button', { name: 'Save' }).click()
+  await expect.poll(async () => (await (await page.request.get('/api/config')).json()).teams.a.name).toBe('Team Mumbai')
+
+  // A new team game shows the new names (the site settings are cached for ~20 seconds per server).
+  const host = await browser.newPage()
+  await host.goto('/')
+  await host.getByRole('button', { name: 'Create a game' }).click()
+  await host.waitForURL(/\/r\/[A-Z]{4}$/)
+  await host.getByLabel('Your name').fill('Asha')
+  await host.getByRole('button', { name: 'Join game' }).click()
+  await host.getByRole('switch', { name: /Team battle/ }).click()
+  await expect(host.getByTestId('team-name-a')).toContainText('Team Mumbai', { timeout: 30_000 })
+  await expect(host.getByTestId('team-name-b')).toContainText('Team Delhi')
+
+  // Put the defaults back.
+  await page.getByTestId('admin-team-a').fill('Team Jai')
+  await page.getByTestId('admin-team-b').fill('Team Veeru')
+  await page.getByTestId('team-names-settings').locator('xpath=ancestor::section[1]').getByRole('button', { name: 'Save' }).click()
+  await expect.poll(async () => (await (await page.request.get('/api/config')).json()).teams.a.name).toBe('Team Jai')
+})

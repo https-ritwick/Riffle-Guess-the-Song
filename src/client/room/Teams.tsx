@@ -1,17 +1,20 @@
-// Team battle standings: Team Jai vs Team Veeru, used in the game, the results and on the TV.
+// Team battle standings (names from the host or the admin), used in the game, the results and on the TV.
 import clsx from 'clsx'
 import { Crown } from 'lucide-react'
 import { TEAMS, type TeamStanding } from '../../shared/modes'
+import { useTeamLabels } from '../lib/teams'
+import { useRoomContext } from './context'
 import { AnimatedNumber } from './Scoreboard'
 
 export function TeamStandings({ teams, big, you }: { teams: TeamStanding[]; big?: boolean; you?: string | null }) {
+  const labels = useTeamLabels(useRoomContext().state.settings)
   const top = Math.max(1, ...teams.map((t) => t.score))
   const leader = teams[0] && teams[1] && teams[0].score > teams[1].score ? teams[0].id : null
   return (
     <section aria-label="Team scores" className={clsx('rounded-3xl border border-white/10 bg-white/[0.035]', big ? 'p-6' : 'p-3.5')} data-testid="team-standings">
       <div className="space-y-2.5">
         {teams.map((t) => {
-          const team = TEAMS[t.id]
+          const team = { ...TEAMS[t.id], ...labels[t.id] }
           return (
             <div key={t.id}>
               <div className={clsx('mb-1 flex items-baseline justify-between gap-2', big ? 'text-3xl' : 'text-sm')}>
@@ -38,10 +41,11 @@ export function TeamStandings({ teams, big, you }: { teams: TeamStanding[]; big?
 
 /** Results: which team won. */
 export function TeamResult({ teams, myTeam }: { teams: TeamStanding[]; myTeam: string | null }) {
+  const labels = useTeamLabels(useRoomContext().state.settings)
   const [a, b] = teams
   if (!a || !b) return null
   const tie = a.score === b.score
-  const winner = TEAMS[a.id]
+  const winner = { ...TEAMS[a.id], ...labels[a.id] }
   return (
     <section className={clsx('relative overflow-hidden rounded-3xl border border-white/10 p-5 sm:p-6', !tie && winner.bg)} data-testid="team-result">
       <p className="text-xs font-bold tracking-[0.25em] text-gray-300 uppercase">Team battle</p>

@@ -5,6 +5,8 @@ import { CHALLENGE_QUESTION } from '../../shared/challenges'
 import type { PublicPlayer, PublicRound, QuestionMode } from '../../shared/protocol'
 import { MAX_STREAK_BONUS, REVEAL_MS, STREAK_BONUS } from '../../shared/rules'
 import { POWER_IDS, POWERS, TEAMS, type PowerId } from '../../shared/modes'
+import { useTeamLabels } from '../lib/teams'
+import { PowerChip, PowerIcon } from './powers'
 import { PlayerAvatar } from '../components/ui'
 import { player as audio, usePlayer } from '../lib/audio'
 import { findSongClip } from '../lib/itunes'
@@ -438,6 +440,11 @@ function Choices({ round, players, onAnswer, locked, buzzer }: { round: PublicRo
             ) : (
               <span className="h-4 w-3/4 animate-pulse rounded bg-white/10" />
             )}
+            {round.peek && !known && (
+              <span className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 rounded-full bg-violet-500/25 px-2 py-0.5 text-xs font-black text-violet-100" data-testid="peek-count">
+                <PowerIcon id="peek" className="h-3 w-3" /> {round.peek[i] ?? 0}
+              </span>
+            )}
             {pickers(i).length > 0 && (
               <span className="absolute top-1.5 right-1.5 flex -space-x-1.5 sm:top-auto sm:right-2 sm:bottom-2">
                 {pickers(i).slice(0, 5).map((p) => (
@@ -454,12 +461,14 @@ function Choices({ round, players, onAnswer, locked, buzzer }: { round: PublicRo
   )
 }
 
-/** Power-ups: one 50-50, Double and Shield each per game, used before answering. */
-function PowerBar({ round, powers, phase, onUse }: { round: PublicRound; powers: PowerId[]; phase: string; onUse: (p: PowerId) => void }) {
+/** Power-ups: each allowed one once per game, one per round, used before answering. */
+function PowerBar({ round, powers, allowed, solo, phase, onUse }: { round: PublicRound; powers: PowerId[]; allowed: PowerId[]; solo: boolean; phase: string; onUse: (p: PowerId) => void }) {
   const open = phase === 'question' && round.yourChoice === null && !round.yourPower
+  const shown = POWER_IDS.filter((id) => allowed.includes(id) && !(solo && POWERS[id].rivals))
+  if (!shown.length) return null
   return (
-    <div className="flex items-center gap-1.5 sm:gap-2" role="group" aria-label="Power-ups" data-testid="power-bar">
-      {POWER_IDS.map((id) => {
+    <div className="-mx-1 flex items-stretch gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:flex-wrap sm:gap-2 sm:overflow-visible" role="group" aria-label="Power-ups" data-testid="power-bar">
+      {shown.map((id) => {
         const has = powers.includes(id)
         const active = round.yourPower === id
         return (
@@ -471,12 +480,13 @@ function PowerBar({ round, powers, phase, onUse }: { round: PublicRound; powers:
             title={POWERS[id].hint}
             aria-pressed={active}
             data-testid={`power-${id}`}
+            aria-label={`${POWERS[id].name}: ${POWERS[id].hint}${has ? '' : ' (used)'}`}
             className={clsx(
-              'flex min-w-0 flex-1 items-center justify-center gap-1 rounded-xl px-2 py-2 text-xs font-bold ring-1 transition sm:text-sm',
-              active ? 'bg-brand-400 text-black ring-brand-300' : has ? 'bg-white/[0.06] text-white ring-white/10 enabled:hover:bg-white/[0.12] disabled:opacity-60' : 'bg-transparent text-gray-600 line-through ring-white/5',
+              'flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-bold whitespace-nowrap ring-1 transition sm:text-sm',
+              active ? 'bg-white text-gray-900 ring-white' : has ? 'bg-white/[0.06] text-white ring-white/10 enabled:hover:bg-white/[0.12] disabled:opacity-60' : 'bg-transparent text-gray-600 line-through ring-white/5 [&_svg]:opacity-40',
             )}
           >
-            <span aria-hidden="true">{POWERS[id].emoji}</span> <span className="truncate">{POWERS[id].name}</span>
+            <PowerIcon id={id} className={clsx('h-4 w-4', active && '!text-gray-900')} /> {POWERS[id].name}
           </button>
         )
       })}
@@ -486,8 +496,10 @@ function PowerBar({ round, powers, phase, onUse }: { round: PublicRound; powers:
 
 /** Antakshari's letter (and whose turn it is in a team battle). */
 function AntakshariBanner({ round, phase, myTeam }: { round: PublicRound; phase: string; myTeam: string | null }) {
-  const turn = round.turn ? TEAMS[round.turn] : null
-  const other = round.turn ? TEAMS[round.turn === 'a' ? 'b' : 'a'] : null
+  const { state } = useRoomContext()
+  const labels = useTeamLabels(state.settings)
+  const turn = round.turn ? { ...TEAMS[round.turn], ...labels[round.turn] } : null
+  const other = round.turn ? labels[round.turn === 'a' ? 'b' : 'a'] : null
   const reveal = phase === 'reveal'
   const letter = reveal ? round.nextLetter : round.letter
   return (
@@ -530,7 +542,7 @@ function Status({ phase, round, you, answeredCount, activeCount, solo }: { phase
     </span>
   )
   if (phase === 'countdown') return <p className="text-lg font-bold text-white">Get ready…</p>
-  const power = round.yourPower ? <span className="ml-2 inline-flex rounded-full bg-brand-400/15 px-2 py-0.5 align-middle text-xs font-extrabold text-brand-200">{POWERS[round.yourPower].emoji} {POWERS[round.yourPower].name}</span> : null
+  const power = round.yourPower ? <PowerChip id={round.yourPower} /> : null
   if (phase === 'question') {
     if (round.yourResult) {
       return round.yourResult.correct ? (
@@ -843,8 +855,13 @@ export function GameView() {
                 <div key={`${round.index}:${outcome?.kind ?? ''}`} className={clsx('relative min-w-0 flex-1', outcome?.kind === 'wrong' && 'animate-shake')}>
                   {state.settings.powerUps && me && (
                     <div className="mb-2.5 sm:mb-3">
-                      <PowerBar round={localRound} powers={me.powers} phase={phase} onUse={activatePower} />
+                      <PowerBar round={localRound} powers={me.powers} allowed={state.settings.powers} solo={state.solo} phase={phase} onUse={activatePower} />
                     </div>
+                  )}
+                  {round.yourNote && phase !== 'countdown' && (
+                    <p className="mb-2.5 flex items-center gap-2 rounded-xl bg-yellow-300/10 px-3 py-2 text-sm font-semibold text-yellow-100 ring-1 ring-yellow-300/20 sm:mb-3" data-testid="power-note">
+                      {round.yourPower && <PowerIcon id={round.yourPower} className="h-4 w-4" />} {round.yourNote}
+                    </p>
                   )}
                   <Choices round={localRound} players={state.players} onAnswer={answer} locked={locked} buzzer={tv} />
                   {outcome?.kind === 'right' && (

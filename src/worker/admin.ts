@@ -10,6 +10,7 @@ import {
   RANGES,
   RoomActionSchema,
   SiteConfigPatchSchema,
+  TeamsConfigSchema,
   UserActionSchema,
   type AdminGroupDetail,
   type AdminGroupRow,
@@ -353,6 +354,7 @@ async function saveConfig(request: Request, env: Env, admin: SessionUser): Promi
   if (b.data.banner) entries.push(['banner', BannerSchema.parse(b.data.banner)])
   if (b.data.maintenance) entries.push(['maintenance', MaintenanceSchema.parse(b.data.maintenance)])
   if (b.data.features) entries.push(['features', FeaturesSchema.parse(b.data.features)])
+  if (b.data.teams) entries.push(['teams', TeamsConfigSchema.parse(b.data.teams)])
   if (!entries.length) return json({ error: 'Nothing to save' }, 400)
   await env.DB.batch(
     entries.map(([key, value]) =>

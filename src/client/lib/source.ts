@@ -100,7 +100,7 @@ export const ANTAKSHARI_MODE = {
   emoji: '🎤',
   title: 'Antakshari',
   tagline: 'Each song starts with the last letter',
-  how: 'Every song starts with the last letter of the one before — “Tum Hi Ho” ends in H, so the next song starts with H. With teams, Jai and Veeru take turns and the other side can steal.',
+  how: 'Every song starts with the last letter of the one before — “Tum Hi Ho” ends in H, so the next song starts with H. With teams, the two teams take turns and the other side can steal.',
   tone: 'from-emerald-400/35 via-emerald-700/15 to-transparent',
 } as const
 

@@ -24,6 +24,8 @@ import { buildSlides, Recap } from './results/Recap'
 import { ShareSheet, type ShareData } from './results/Share'
 import { biggestComeback, computeAwards, emojiGrid, roundStats, scoreMessage, type RoundStat } from './results/stats'
 import { TeamResult } from './Teams'
+import { TEAMS } from '../../shared/modes'
+import { useTeamLabels } from '../lib/teams'
 import { useStartGame } from './useStartGame'
 
 const CONFETTI_COLORS = ['#ffc44d', '#ff6a3d', '#e8336d', '#f59e0b', '#22c55e', '#ffffff']
@@ -389,8 +391,16 @@ export function Results() {
   const recapKey = `${state.code}:${history.length}:${history[0]?.track.id ?? ''}:${history[history.length - 1]?.track.id ?? ''}`
   const [recap, setRecap] = useState(() => history.length > 0 && !shownRecaps.has(recapKey))
   const comeback = useMemo(() => biggestComeback(history, ranked), [history, ranked])
+  const labels = useTeamLabels(state.settings)
+  const team = state.teams && state.teams.length === 2
+    ? {
+        teams: state.teams.map((t) => ({ ...labels[t.id], score: t.score, members: t.members, bar: TEAMS[t.id].bar })),
+        tie: state.teams[0]!.score === state.teams[1]!.score,
+        mine: me?.team ? me.team === state.teams[0]!.id : null,
+      }
+    : undefined
   const slides = useMemo(
-    () => buildSlides({ stats, ranked, you, me, solo: state.solo, sourceTitle: source.title, myScore, myRight: myCorrect, avgMs, best, awards, comeback, noun }),
+    () => buildSlides({ stats, ranked, you, me, solo: state.solo, sourceTitle: source.title, myScore, myRight: myCorrect, avgMs, best, awards, comeback, noun, team }),
     // Built once per game; live score updates after the game don't need to rebuild the story.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [stats, you, state.solo, source.title, myScore, myCorrect, best, awards, noun],
@@ -489,7 +499,15 @@ export function Results() {
 
   const share = () => setSharing(true)
 
-  const winnerLine = ranked[0] && ranked.length > 1 ? (ranked[0].id === you ? 'You win!' : `${ranked[0].name} wins!`) : null
+  const winnerLine = team
+    ? team.tie
+      ? 'The teams are tied!'
+      : `${team.teams[0]!.emoji} ${team.teams[0]!.name} wins!${team.mine ? ' (your team!)' : ''}`
+    : ranked[0] && ranked.length > 1
+      ? ranked[0].id === you
+        ? 'You win!'
+        : `${ranked[0].name} wins!`
+      : null
 
   return (
     <main className="mx-auto w-full max-w-6xl px-3 pb-28 sm:px-4 lg:pb-12">
@@ -512,7 +530,7 @@ export function Results() {
             </p>
             <h2 className="mb-3 text-3xl font-black text-white sm:text-5xl">Game Complete! 🎉</h2>
             {winnerLine && (
-              <p className="mb-2 inline-flex items-center gap-2 text-xl text-white">
+              <p className="mb-2 inline-flex items-center gap-2 text-xl text-white" data-testid="winner-line">
                 <Crown className="h-5 w-5 text-amber-300" /> <span className="font-extrabold">{winnerLine}</span>
               </p>
             )}

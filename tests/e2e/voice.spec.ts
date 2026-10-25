@@ -58,3 +58,35 @@ test('voice: everyone can talk at the same time', async ({ browser }) => {
   const after = await Promise.all(players.map((p) => inbound(p.page)))
   after.forEach((bytes, i) => bytes.forEach((b, j) => expect(b, `player ${i} from peer ${j}`).toBeGreaterThan(before[i]![j]! + 2000)))
 })
+
+test('voice: players who can’t connect directly still hear each other through the relay', async ({ browser }) => {
+  const players = await Promise.all(['Asha', 'Kabir', 'Meera'].map(async () => newPlayer(await browser.newContext({ permissions: ['microphone'] }))))
+  // Like phones on mobile data with no TURN server: direct connections never get going.
+  for (const p of players) {
+    await p.page.addInitScript(() => {
+      const Native = window.RTCPeerConnection
+      window.RTCPeerConnection = class extends Native {
+        constructor(config?: RTCConfiguration) {
+          super({ ...config, iceServers: [], iceTransportPolicy: 'relay' })
+        }
+      } as typeof RTCPeerConnection
+    })
+  }
+  const code = await createRoom(players[0]!.page, 'Asha')
+  for (const [i, name] of [[1, 'Kabir'], [2, 'Meera']] as const) {
+    await players[i]!.page.goto(`/r/${code}`)
+    await joinAs(players[i]!.page, name)
+  }
+  for (const p of players) await p.page.getByTestId('mic-toggle').click()
+
+  // Everyone sees the other two light up as their voices arrive.
+  const names = ['Asha', 'Kabir', 'Meera']
+  for (const [i, p] of players.entries()) {
+    for (const other of names.filter((_, j) => j !== i)) {
+      await expect
+        .poll(async () => p.page.getByTestId('player-list').locator('li', { hasText: other }).locator('[data-speaking="true"]').count(), { timeout: 20_000, intervals: [100] })
+        .toBeGreaterThan(0)
+    }
+  }
+  await players[0]!.page.screenshot({ path: 'test-screens/voice-glow.png' })
+})

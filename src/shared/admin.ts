@@ -1,5 +1,6 @@
 // Site settings, analytics beacons and the admin console's API types.
 import { z } from 'zod'
+import { DEFAULT_TEAM_LABELS, TeamNameSchema } from './modes'
 
 const IST_OFFSET_MS = 330 * 60 * 1000
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -42,10 +43,16 @@ export const FeaturesSchema = z.object({
 })
 export type Features = z.infer<typeof FeaturesSchema>
 
+const TeamLabelSchema = z.object({ name: TeamNameSchema, emoji: z.string().trim().min(1).max(8) })
+/** Default team names for team battles (hosts can still rename them per room). */
+export const TeamsConfigSchema = z.object({ a: TeamLabelSchema, b: TeamLabelSchema })
+export type TeamsConfig = z.infer<typeof TeamsConfigSchema>
+
 export interface SiteConfig {
   banner: Banner
   maintenance: Maintenance
   features: Features
+  teams: TeamsConfig
 }
 
 export const DEFAULT_SITE_CONFIG: SiteConfig = {
@@ -57,12 +64,14 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   },
   maintenance: { enabled: false, message: 'Riffle is getting a quick upgrade. New games are paused for a few minutes.' },
   features: { chat: true, voice: true, ai: true, spotify: true, groups: true, daily: true },
+  teams: { a: { ...DEFAULT_TEAM_LABELS.a }, b: { ...DEFAULT_TEAM_LABELS.b } },
 }
 
 export const SiteConfigPatchSchema = z.object({
   banner: BannerSchema.optional(),
   maintenance: MaintenanceSchema.optional(),
   features: FeaturesSchema.optional(),
+  teams: TeamsConfigSchema.optional(),
 })
 
 // ---------------------------------------------------------------------------

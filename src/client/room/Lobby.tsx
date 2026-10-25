@@ -1,12 +1,14 @@
 import clsx from 'clsx'
-import { ArrowLeftRight, Check, Copy, Crown, ExternalLink, Flame, Gauge, Headphones, Loader2, Lock, Play, QrCode, Share2, Shuffle, Sparkles, Sprout, Tv, UserX, Users, WifiOff } from 'lucide-react'
+import { ArrowLeftRight, Check, Copy, Crown, Pencil, ExternalLink, Flame, Gauge, Headphones, Loader2, Lock, Play, QrCode, Share2, Shuffle, Sparkles, Sprout, Tv, UserX, Users, WifiOff } from 'lucide-react'
 import qrcode from 'qrcode-generator'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { GUESS_SECONDS_OPTIONS, REGIONS, ROUND_OPTIONS } from '../../shared/catalog'
 import type { Difficulty, Settings } from '../../shared/protocol'
 import { MAX_PLAYERS } from '../../shared/rules'
-import { POWER_IDS, POWERS, TEAM_IDS, TEAMS } from '../../shared/modes'
+import { POWER_IDS, POWERS, TEAM_IDS, TEAMS, type PowerId, type TeamId } from '../../shared/modes'
+import { useTeamLabels } from '../lib/teams'
+import { PowerIcon } from './powers'
 import { useToast } from '../components/Toasts'
 import { Button, Card, PlayerAvatar, SectionTitle, Toggle } from '../components/ui'
 import { player as audio } from '../lib/audio'
@@ -78,10 +80,18 @@ function InviteCard() {
   )
 }
 
-/** Team battles: who's on Team Jai and who's on Team Veeru. Tap a team to switch; the host can move anyone or shuffle. */
+/** Team battles: who's on which team. Tap a team to switch; the host can rename teams, move anyone or shuffle. */
 function TeamsCard() {
-  const { state, you, isHost, send } = useRoomContext()
+  const { state, you, isHost, send, speaking } = useRoomContext()
   const me = state.players.find((p) => p.id === you)
+  const labels = useTeamLabels(state.settings)
+  const [editing, setEditing] = useState<TeamId | null>(null)
+  const [draft, setDraft] = useState('')
+  const rename = (t: TeamId, name: string) => {
+    const clean = name.trim().slice(0, 24)
+    if (clean) send({ t: 'settings', settings: { teamNames: { a: labels.a.name, b: labels.b.name, [t]: clean } } })
+    setEditing(null)
+  }
   return (
     <Card>
       <SectionTitle
@@ -97,17 +107,53 @@ function TeamsCard() {
       </SectionTitle>
       <div className="grid grid-cols-2 gap-2.5" data-testid="teams">
         {TEAM_IDS.map((t) => {
-          const team = TEAMS[t]
+          const team = { ...TEAMS[t], ...labels[t] }
           const members = state.players.filter((p) => p.team === t)
           return (
             <div key={t} className={clsx('rounded-2xl p-2.5 ring-1', team.tile)} data-testid={`team-${t}`}>
-              <p className={clsx('mb-2 text-sm font-extrabold', team.text)}>
-                {team.emoji} {team.name}
-              </p>
+{editing === t ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    rename(t, draft)
+                  }}
+                  className="mb-2"
+                >
+                  <input
+                    autoFocus
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value.slice(0, 24))}
+                    onBlur={() => rename(t, draft)}
+                    aria-label={`Name for ${team.name}`}
+                    className="h-8 w-full rounded-lg border border-white/20 bg-black/30 px-2 text-sm font-bold text-white outline-none focus:border-brand-400"
+                    data-testid={`team-name-input-${t}`}
+                  />
+                </form>
+              ) : (
+                <p className={clsx('mb-2 flex items-center gap-1 text-sm font-extrabold', team.text)}>
+                  <span className="min-w-0 truncate" data-testid={`team-name-${t}`}>
+                    {team.emoji} {team.name}
+                  </span>
+                  {isHost && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDraft(team.name)
+                        setEditing(t)
+                      }}
+                      aria-label={`Rename ${team.name}`}
+                      className="shrink-0 rounded p-0.5 text-gray-400 hover:bg-white/10 hover:text-white"
+                      data-testid={`rename-team-${t}`}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </p>
+              )}
               <ul className="space-y-1.5">
                 {members.map((p) => (
                   <li key={p.id} className="flex items-center gap-1.5">
-                    <PlayerAvatar avatar={p.avatar} photo={p.photo} name={p.name} size="sm" dim={!p.connected} />
+                    <PlayerAvatar avatar={p.avatar} photo={p.photo} name={p.name} size="sm" dim={!p.connected} speaking={!!speaking?.has(p.id)} />
                     <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">
                       {p.name}
                       {p.id === you && <span className="font-normal text-gray-400"> (you)</span>}
@@ -116,7 +162,7 @@ function TeamsCard() {
                       <button
                         type="button"
                         onClick={() => send({ t: 'team', team: t === 'a' ? 'b' : 'a', playerId: p.id })}
-                        aria-label={`Move ${p.name} to ${TEAMS[t === 'a' ? 'b' : 'a'].name}`}
+                        aria-label={`Move ${p.name} to ${labels[t === 'a' ? 'b' : 'a'].name}`}
                         className="rounded p-1 text-gray-400 hover:bg-white/10 hover:text-white"
                       >
                         <ArrowLeftRight className="h-3.5 w-3.5" />
@@ -212,7 +258,7 @@ function AntakshariCard() {
 }
 
 function PlayersCard() {
-  const { state, you, isHost, send } = useRoomContext()
+  const { state, you, isHost, send, speaking } = useRoomContext()
   const online = state.players.filter((p) => p.connected).length
   return (
     <Card>
@@ -220,7 +266,7 @@ function PlayersCard() {
       <ul className="space-y-2" data-testid="player-list">
         {state.players.map((p) => (
           <li key={p.id} className="flex items-center gap-3 rounded-xl bg-white/[0.04] px-3 py-2">
-            <PlayerAvatar avatar={p.avatar} photo={p.photo} name={p.name} dim={!p.connected} />
+            <PlayerAvatar avatar={p.avatar} photo={p.photo} name={p.name} dim={!p.connected} speaking={!!speaking?.has(p.id)} />
             <span className={clsx('min-w-0 flex-1 truncate font-semibold', p.connected ? 'text-white' : 'text-gray-500')}>
               {p.name}
               {p.id === you && <span className="ml-1.5 text-sm font-normal text-gray-400">(you)</span>}
@@ -356,6 +402,8 @@ function DifficultyPicker({ value, onChange, disabled }: { value: Difficulty; on
 function SettingsCard() {
   const { state, isHost, send } = useRoomContext()
   const s = state.settings
+  const labels = useTeamLabels(s)
+  const togglePower = (id: PowerId) => update({ powers: s.powers.includes(id) ? s.powers.filter((p) => p !== id) : [...s.powers, id] })
   const update = (patch: Partial<Settings>) => send({ t: 'settings', settings: patch })
   const songs = s.game === 'songs'
 
@@ -413,7 +461,7 @@ function SettingsCard() {
       <div className="mt-5 grid gap-4 border-t border-gray-800 pt-5 sm:grid-cols-2">
         <Toggle
           label="⚡ Power-ups"
-          hint={`Everyone gets ${POWER_IDS.map((p) => `${POWERS[p].emoji} ${POWERS[p].name}`).join(', ')} — once each per game`}
+          hint="Everyone gets each power-up you pick below, once per game"
           checked={s.powerUps}
           disabled={!isHost}
           onChange={(powerUps) => update({ powerUps })}
@@ -421,13 +469,49 @@ function SettingsCard() {
         {!state.solo && (
           <Toggle
             label="⚔️ Team battle"
-            hint={s.antakshari && songs ? 'Team Jai vs Team Veeru take turns; the other side can steal for half points' : 'Team Jai vs Team Veeru — the best average score wins'}
+            hint={s.antakshari && songs ? `${labels.a.name} vs ${labels.b.name} take turns; the other side can steal for half points` : `${labels.a.name} vs ${labels.b.name} — the best average score wins`}
             checked={s.teams}
             disabled={!isHost}
             onChange={(teams) => update({ teams })}
           />
         )}
       </div>
+      {s.powerUps && (
+        <fieldset className="mt-4">
+          <legend className="mb-2 text-sm font-medium text-gray-300">Power-ups in this match</legend>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" data-testid="power-picker">
+            {POWER_IDS.map((id) => {
+              const on = s.powers.includes(id)
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  disabled={!isHost || (on && s.powers.length === 1)}
+                  onClick={() => togglePower(id)}
+                  aria-pressed={on}
+                  data-testid={`pick-power-${id}`}
+                  className={clsx(
+                    'flex items-start gap-2.5 rounded-xl border p-2.5 text-left transition disabled:cursor-default',
+                    on ? 'border-white/25 bg-white/[0.07]' : 'border-white/5 bg-transparent opacity-50 enabled:hover:opacity-80',
+                  )}
+                >
+                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-black/30">
+                    <PowerIcon id={id} className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-white">
+                      {POWERS[id].name}
+                      {POWERS[id].rivals && <span className="ml-1.5 text-[10px] font-semibold text-gray-400 uppercase">multiplayer</span>}
+                    </span>
+                    <span className="block text-xs leading-snug text-gray-400">{POWERS[id].hint}</span>
+                  </span>
+                  {on && <Check className="ml-auto h-4 w-4 shrink-0 text-emerald-300" />}
+                </button>
+              )
+            })}
+          </div>
+        </fieldset>
+      )}
     </Card>
   )
 }

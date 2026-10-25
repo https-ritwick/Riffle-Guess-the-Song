@@ -41,7 +41,7 @@ import {
 import { sanitizeName } from '../shared/text'
 import { matchSong, songSearchUrl, type SongClip, type SongRef } from '../shared/songs'
 import { istDay, type AdminRoom } from '../shared/admin'
-import { buildAntakshari, POWER_IDS, STEAL_SHARE, TEAM_IDS, teamStandings, type PowerId, type TeamId } from '../shared/modes'
+import { buildAntakshari, POWER_IDS, POWERS, RETRY_SHARE, ROB_POINTS, STEAL_SHARE, TEAM_IDS, teamStandings, type PowerId, type TeamId } from '../shared/modes'
 import { aiEnabled, generateAwardNames, generateChallenges } from './ai'
 import { json } from './http'
 import { spotifyArtwork } from './playlist'
@@ -60,6 +60,9 @@ const MAX_PLAYED = 2000
 const AI_WAIT_MS = 15_000
 /** AI questions kept ready per challenge kind. */
 const AI_TARGET = 20
+/** Voice relay: biggest packet accepted, and packets per second per speaker (60 ms packets → ~17/s). */
+const MAX_VOICE_PACKET = 4096
+const MAX_VOICE_RATE = 40
 
 type ChallengeGame = Exclude<GameKind, 'songs'>
 
@@ -138,9 +141,11 @@ interface GameRecord {
   /** When the game began, and whether it has gone into the analytics tables. */
   createdAt?: number
   tracked?: boolean
-  /** This round: power-ups used, and the options a 50-50 took away, by player. */
+  /** This round: power-ups used, options taken away (50-50, a missed Second chance), notes, by player. */
   powers?: Record<string, PowerId>
   removed?: Record<string, number[]>
+  notes?: Record<string, string>
+  retried?: Record<string, boolean>
   /** Any TV / big screen watched this game. */
   tv?: boolean
 }
@@ -266,6 +271,8 @@ export class GameRoom extends DurableObject<Env> {
   private artCache = new Map<string, string | null>()
   /** Recent chat messages (kept under their own key so answers don't rewrite them). */
   private chat: ChatMessage[] = []
+  /** Voice relay rate limiting, per player: packets in the current second. */
+  private voiceRate = new Map<string, { second: number; n: number }>()
   /** The admin can switch AI off site-wide; each new connection brings the current setting. */
   private aiSwitch = true
 
@@ -477,7 +484,12 @@ export class GameRoom extends DurableObject<Env> {
       ws.close(4004, 'Room closed')
       return
     }
-    if (typeof raw !== 'string' || raw.length > MAX_MESSAGE_BYTES) {
+    // Binary messages are voice for players who can't connect to each other directly.
+    if (typeof raw !== 'string') {
+      this.relayVoice(ws, raw)
+      return
+    }
+    if (raw.length > MAX_MESSAGE_BYTES) {
       this.send(ws, { t: 'error', code: 'bad_message', message: 'Message rejected.' })
       return
     }
@@ -1059,6 +1071,13 @@ export class GameRoom extends DurableObject<Env> {
     const elapsed = Math.min(total, Math.max(0, now - game.startsAt))
     const correct = choice === question.correct
     const power = game.powers?.[player.id]
+    // Second chance: the first wrong pick only takes that option away.
+    if (power === 'retry' && !correct && !game.retried?.[player.id]) {
+      game.retried = { ...game.retried, [player.id]: true }
+      game.removed = { ...game.removed, [player.id]: [...(game.removed?.[player.id] ?? []), choice] }
+      game.notes = { ...game.notes, [player.id]: 'Not that one — your second chance: pick again for half points.' }
+      return true
+    }
     const turn = this.turnTeam(game.index)
     const steal = !!turn && player.team !== turn
     const multiplier = (this.isDoubleRound() ? 2 : 1) * (correct && power === 'double' ? 2 : 1)
@@ -1067,10 +1086,14 @@ export class GameRoom extends DurableObject<Env> {
     const first = correct && rivals && !Object.values(game.answers).some((a) => a.correct)
     const base = correct ? scoreAnswer(true, elapsed, total, player.streak + 1) + (first ? FIRST_BONUS : 0) : -WRONG_PENALTY[room.settings.difficulty]
     // A shield (or a steal attempt) makes a wrong answer free; a steal earns half the points.
-    const points = !correct && (power === 'shield' || steal) ? 0 : Math.round(base * multiplier * (steal ? STEAL_SHARE : 1))
+    const share = (steal ? STEAL_SHARE : 1) * (game.retried?.[player.id] ? RETRY_SHARE : 1)
+    const points = !correct && (power === 'shield' || steal) ? 0 : Math.round(base * multiplier * share)
     const live = room.settings.liveScoring
     game.answers[player.id] = { choice, at: now, ms: elapsed, correct, points, applied: live, first, ...(power ? { power } : {}), ...(steal ? { steal } : {}) }
-    if (live) this.applyResult(player, correct, points, power === 'shield')
+    if (live) {
+      this.applyResult(player, correct, points, power === 'shield')
+      if (correct && power === 'rob') this.rob(player, game.answers[player.id]!)
+    }
     if (this.everyoneAnswered()) this.reveal(now)
     return true
   }
@@ -1091,8 +1114,9 @@ export class GameRoom extends DurableObject<Env> {
   private usePower(player: PlayerRecord, round: number, power: PowerId): boolean {
     const room = this.room!
     const game = room.game
-    if (!room.settings.powerUps || room.phase !== 'question' || !game || round !== game.index) return false
+    if (!room.settings.powerUps || !room.settings.powers.includes(power) || room.phase !== 'question' || !game || round !== game.index) return false
     if (game.answers[player.id] || game.powers?.[player.id] || player.powersUsed?.includes(power)) return false
+    if (POWERS[power].rivals && room.players.filter((p) => p.connected).length < 2) return false
     game.powers = { ...game.powers, [player.id]: power }
     player.powersUsed = [...(player.powersUsed ?? []), power]
     if (power === 'fifty') {
@@ -1100,7 +1124,26 @@ export class GameRoom extends DurableObject<Env> {
       const wrong = shuffle([0, 1, 2, 3].filter((i) => i !== q.correct), secureRandom).slice(0, 2)
       game.removed = { ...game.removed, [player.id]: wrong.sort() }
     }
+    if (power === 'hint') {
+      const q = game.questions[game.index]!
+      const answer = q.options[q.correct] ?? ''
+      const words = answer.trim().split(/\s+/).length
+      const year = !q.challenge && q.track.year ? ` · from ${q.track.year}` : ''
+      game.notes = { ...game.notes, [player.id]: `Hint: starts with “${answer.trim()[0]?.toUpperCase() ?? '?'}” · ${words} word${words === 1 ? '' : 's'}${year}` }
+    }
     return true
+  }
+
+  /** Robin Hood: a right answer also takes points from whoever leads (not you). */
+  private rob(player: PlayerRecord, answer: AnswerRecord): void {
+    const game = this.room!.game
+    const leader = this.room!.players.filter((p) => p.id !== player.id && p.score > 0).sort((a, b) => b.score - a.score)[0]
+    if (!leader || !game) return
+    const taken = Math.min(ROB_POINTS, leader.score)
+    leader.score -= taken
+    player.score += taken
+    answer.points += taken
+    game.notes = { ...game.notes, [player.id]: `Robin Hood: you took ${taken} points from ${leader.name}!` }
   }
 
   /** Antakshari team battles: teams take turns, starting with Team Jai. */
@@ -1187,6 +1230,8 @@ export class GameRoom extends DurableObject<Env> {
           game.answers = {}
           game.powers = {}
           game.removed = {}
+          game.notes = {}
+          game.retried = {}
           this.startQuestion(game, now)
         } else {
           this.finish()
@@ -1223,6 +1268,7 @@ export class GameRoom extends DurableObject<Env> {
       if (!a) p.streak = 0
       else if (!a.applied) {
         this.applyResult(p, a.correct, a.points, a.power === 'shield')
+        if (a.correct && a.power === 'rob') this.rob(p, a)
         a.applied = true
       }
       picks[p.id] = {
@@ -1268,6 +1314,42 @@ export class GameRoom extends DurableObject<Env> {
 
   private aiOn(): boolean {
     return this.aiSwitch && aiEnabled(this.env)
+  }
+
+/**
+   * Voice relay: forward a speaker's audio packet to everyone else in the voice
+   * channel, tagged with who it's from. Nothing is stored; listeners that hear the
+   * speaker directly ignore it.
+   */
+  private relayVoice(ws: WebSocket, raw: ArrayBuffer): void {
+    const room = this.room!
+    if (raw.byteLength < 2 || raw.byteLength > MAX_VOICE_PACKET) return
+    const att = this.attachment(ws)
+    if (!att.pid || att.off?.includes('voice') || room.solo) return
+    const player = room.players.find((p) => p.id === att.pid)
+    if (!player || player.voice !== 'live') return
+    const second = Math.floor(Date.now() / 1000)
+    const rate = this.voiceRate.get(player.id)
+    if (rate && rate.second === second) {
+      if (++rate.n > MAX_VOICE_RATE) return
+    } else {
+      this.voiceRate.set(player.id, { second, n: 1 })
+    }
+    const id = new TextEncoder().encode(player.id)
+    const packet = new Uint8Array(1 + id.length + raw.byteLength)
+    packet[0] = id.length
+    packet.set(id, 1)
+    packet.set(new Uint8Array(raw), 1 + id.length)
+    for (const s of this.connectedSockets()) {
+      const pid = this.attachment(s).pid
+      if (!pid || pid === player.id) continue
+      if (!room.players.find((p) => p.id === pid)?.voice) continue
+      try {
+        s.send(packet)
+      } catch {
+        // socket closing
+      }
+    }
   }
 
   private activity(): NonNullable<RoomRecord['activity']> {
@@ -1689,7 +1771,7 @@ export class GameRoom extends DurableObject<Env> {
           first: !!a?.first && (live || room.phase === 'reveal'),
           voice: p.connected ? (p.voice ?? null) : null,
           team: room.settings.teams && !room.solo ? (p.team ?? null) : null,
-          powers: room.settings.powerUps ? POWER_IDS.filter((x) => !p.powersUsed?.includes(x)) : [],
+          powers: room.settings.powerUps ? POWER_IDS.filter((x) => room.settings.powers.includes(x) && !p.powersUsed?.includes(x)) : [],
         }
       }),
       round:
@@ -1735,6 +1817,11 @@ export class GameRoom extends DurableObject<Env> {
               letter: room.settings.antakshari ? (question.letter ?? null) : null,
               nextLetter: room.settings.antakshari && room.phase === 'reveal' && next ? (next.letter ?? null) : null,
               turn: this.turnTeam(game.index),
+              yourNote: pid && answering ? (game.notes?.[pid] ?? null) : null,
+              peek:
+                pid && room.phase === 'question' && game.powers?.[pid] === 'peek'
+                  ? [0, 1, 2, 3].map((i) => Object.entries(game.answers).filter(([id, a]) => id !== pid && a.choice === i).length)
+                  : null,
             }
           : null,
       history:

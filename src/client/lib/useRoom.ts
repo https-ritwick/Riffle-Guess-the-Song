@@ -77,6 +77,7 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
   /** Goes up every time the server seats us (first join and every reconnect). */
   const [seat, setSeat] = useState(0)
   const rtcHandler = useRef<((from: string, data: string) => void) | null>(null)
+  const relayHandler = useRef<((data: ArrayBuffer) => void) | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const nameRef = useRef<string | null>(load(tokenKey(code)) ? load('name') : null)
@@ -113,6 +114,11 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
     }
 
     const onMessage = (ev: MessageEvent) => {
+      // Binary messages are relayed voice.
+      if (ev.data instanceof ArrayBuffer) {
+        relayHandler.current?.(ev.data)
+        return
+      }
       if (ev.data === 'pong' || typeof ev.data !== 'string') return
       let msg: ServerMessage
       try {
@@ -187,6 +193,7 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
       if (disposed) return
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
       const ws = new WebSocket(`${proto}://${location.host}/api/rooms/${code}/ws`)
+      ws.binaryType = 'arraybuffer'
       wsRef.current = ws
       setStatus((s) => (s === 'checking' ? 'connecting' : s))
 
@@ -271,10 +278,22 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
   /** Current time on the server's clock (ms). */
   const serverNow = useCallback(() => Date.now() + offsetRef.current, [])
 
+  /** Voice relay: send one packet (dropped when the connection is backed up, so voice never lags the game). */
+  const sendBinary = useCallback((data: Uint8Array) => {
+    const ws = wsRef.current
+    if (ws?.readyState !== WebSocket.OPEN || ws.bufferedAmount > 64_000) return false
+    ws.send(data as Uint8Array<ArrayBuffer>)
+    return true
+  }, [])
+
+  const onRelay = useCallback((fn: ((data: ArrayBuffer) => void) | null) => {
+    relayHandler.current = fn
+  }, [])
+
   /** Who handles WebRTC signalling from other players (the voice channel). */
   const onRtc = useCallback((fn: ((from: string, data: string) => void) | null) => {
     rtcHandler.current = fn
   }, [])
 
-  return { status, state, you, error, reactions, suggestion, chat, seat, onRtc, send: sendRaw, join, leave, serverNow, wantsSeat: nameRef.current !== null }
+  return { status, state, you, error, reactions, suggestion, chat, seat, onRtc, onRelay, sendBinary, send: sendRaw, join, leave, serverNow, wantsSeat: nameRef.current !== null }
 }

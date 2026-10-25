@@ -9,6 +9,8 @@ export interface RoomContextValue {
   send: (msg: ClientMessage) => boolean
   serverNow: () => number
   leave: () => void
+  /** Players whose voice is coming through right now (for the talking glow). */
+  speaking?: ReadonlySet<string>
 }
 
 export const RoomContext = createContext<RoomContextValue | null>(null)

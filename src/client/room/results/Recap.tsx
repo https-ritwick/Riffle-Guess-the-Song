@@ -177,6 +177,8 @@ export interface RecapInput {
   comeback: { p: PublicPlayer; from: number; to: number } | null
   /** 'song', or 'question' for challenge games. */
   noun?: string
+  /** Team battles: the two teams, winner first, and which one you were on. */
+  team?: { teams: { name: string; emoji: string; score: number; members: number; bar: string }[]; tie: boolean; mine: boolean | null }
 }
 
 /** A challenge round's prompt (dialogue or emojis), shown where a song would show its cover. */
@@ -368,6 +370,39 @@ export function buildSlides(x: RecapInput): Slide[] {
                 <AwardCard award={a} compact />
               </div>
             ))}
+          </div>
+        </>
+      ),
+    })
+  }
+
+  if (x.team && x.team.teams.length === 2) {
+    const [win, lose] = x.team.teams as [NonNullable<RecapInput['team']>['teams'][number], NonNullable<RecapInput['team']>['teams'][number]]
+    const top = Math.max(1, win.score)
+    slides.push({
+      key: 'team',
+      tone: 'from-sky-700/40 via-[#0d0716] to-orange-700/40',
+      ms: 5500,
+      body: (
+        <>
+          <Eyebrow>Team battle</Eyebrow>
+          <Big className="mb-2">{x.team.tie ? 'It’s a tie!' : `${win.emoji} ${win.name} wins!`}</Big>
+          {!x.team.tie && x.team.mine !== null && <Dialogue>{x.team.mine ? '“Jo jeeta wohi Sikandar!” — that’s your team!' : '“Haar ke jeetne wale ko baazigar kehte hain.”'}</Dialogue>}
+          <div className="mx-auto mt-6 max-w-sm space-y-4 text-left" data-testid="recap-team">
+            {[win, lose].map((t, n) => (
+              <div key={t.name} className="rise-in" style={{ animationDelay: `${0.3 + n * 0.3}s` }}>
+                <div className="mb-1 flex items-baseline justify-between text-lg font-bold text-white">
+                  <span>
+                    {t.emoji} {t.name} <span className="text-sm font-normal text-gray-400">· {t.members}</span>
+                  </span>
+                  <span className="tabular-nums">{t.score.toLocaleString()}</span>
+                </div>
+                <div className="h-3 overflow-hidden rounded-full bg-white/10">
+                  <div className={clsx('h-full rounded-full', t.bar)} style={{ width: `${Math.max(3, (t.score / top) * 100)}%` }} />
+                </div>
+              </div>
+            ))}
+            <p className="text-center text-xs text-gray-400">Average points per player</p>
           </div>
         </>
       ),

@@ -105,10 +105,12 @@ export async function siteConfig(env: Env): Promise<SiteConfig> {
   if (configCache && Date.now() - configCache.at < CONFIG_TTL_MS) return configCache.value
   const value: SiteConfig = structuredClone(DEFAULT_SITE_CONFIG)
   try {
-    const { results } = await env.DB.prepare("SELECT key, value FROM app_config WHERE key IN ('banner', 'maintenance', 'features')").all<{ key: keyof SiteConfig; value: string }>()
+    const { results } = await env.DB.prepare("SELECT key, value FROM app_config WHERE key IN ('banner', 'maintenance', 'features', 'teams')").all<{ key: keyof SiteConfig; value: string }>()
     for (const row of results) {
       try {
-        Object.assign(value[row.key], JSON.parse(row.value))
+        const parsed = JSON.parse(row.value)
+        if (row.key === 'teams') value.teams = { a: { ...value.teams.a, ...parsed.a }, b: { ...value.teams.b, ...parsed.b } }
+        else Object.assign(value[row.key], parsed)
       } catch {
         // keep the default for a damaged value
       }

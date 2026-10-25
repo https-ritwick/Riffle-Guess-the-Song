@@ -6,7 +6,7 @@ import type { AwardName } from './awards'
 import type { ChallengePrompt } from './challenges'
 import { REACTIONS } from './rules'
 import { MAX_CHAT_LENGTH, MAX_SIGNAL_LENGTH, STICKER_IDS, type ChatMessage, type VoiceState } from './chat'
-import { POWER_IDS, TEAM_IDS, type PowerId, type TeamId, type TeamStanding } from './modes'
+import { POWER_IDS, TEAM_IDS, TeamNameSchema, type PowerId, type TeamId, type TeamStanding } from './modes'
 
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
 export const ROOM_CODE_RE = /^[A-HJ-NP-Z]{4}$/
@@ -111,8 +111,12 @@ const SettingsShape = {
   /** Final song is worth double points. */
   doubleFinal: z.boolean(),
   game: GameKindSchema,
-  /** Each player gets one 50-50, Double and Shield per game. */
+  /** Each player gets one of each allowed power-up per game. */
   powerUps: z.boolean(),
+  /** Which power-ups are in play. */
+  powers: z.array(z.enum(POWER_IDS)).max(POWER_IDS.length),
+  /** The host's names for the two teams (null: the site's default names). */
+  teamNames: z.object({ a: TeamNameSchema, b: TeamNameSchema }).nullable(),
   /** Two teams; the team with the best average score wins. */
   teams: z.boolean(),
   /** Song games: each song starts with the last letter of the one before. */
@@ -127,6 +131,8 @@ export const SettingsSchema = z.object({
   doubleFinal: SettingsShape.doubleFinal.default(true),
   game: SettingsShape.game.default('songs'),
   powerUps: SettingsShape.powerUps.default(false),
+  powers: SettingsShape.powers.default([...POWER_IDS]),
+  teamNames: SettingsShape.teamNames.default(null),
   teams: SettingsShape.teams.default(false),
   antakshari: SettingsShape.antakshari.default(false),
 })
@@ -150,6 +156,8 @@ export const DEFAULT_SETTINGS: Settings = {
   doubleFinal: true,
   game: 'songs',
   powerUps: false,
+  powers: [...POWER_IDS],
+  teamNames: null,
   teams: false,
   antakshari: false,
 }
@@ -315,6 +323,10 @@ export interface PublicRound {
   nextLetter: string | null
   /** Antakshari team battle: whose turn it is (the other team can steal for half points). */
   turn: TeamId | null
+  /** Just for you: a Hint, a Second chance or what Robin Hood took. */
+  yourNote: string | null
+  /** Crowd peek: how many players picked each option so far. */
+  peek: number[] | null
 }
 
 export interface RoundSummary {

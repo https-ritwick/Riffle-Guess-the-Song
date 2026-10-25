@@ -1,7 +1,8 @@
 import clsx from 'clsx'
 import { Megaphone, Save, ToggleLeft, Wrench } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { Banner, Features, Maintenance, SiteConfig } from '../../shared/admin'
+import type { Banner, Features, Maintenance, SiteConfig, TeamsConfig } from '../../shared/admin'
+import { TEAM_IDS, TEAMS } from '../../shared/modes'
 import { useToast } from '../components/Toasts'
 import { Toggle } from '../components/ui'
 import { api } from '../lib/api'
@@ -36,6 +37,7 @@ export function SettingsPage() {
   const [banner, setBanner] = useState<Banner | null>(null)
   const [maintenance, setMaintenance] = useState<Maintenance | null>(null)
   const [features, setFeatures] = useState<Features | null>(null)
+  const [teams, setTeams] = useState<TeamsConfig | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
   useEffect(() => {
@@ -43,6 +45,7 @@ export function SettingsPage() {
     setBanner(data.banner)
     setMaintenance(data.maintenance)
     setFeatures(data.features)
+    setTeams(data.teams)
   }, [data])
 
   const save = async (part: keyof SiteConfig, value: unknown) => {
@@ -59,11 +62,13 @@ export function SettingsPage() {
   }
 
   if (error) return <ErrorNote error={error} onRetry={reload} />
-  if (!data || !banner || !maintenance || !features) return <Skeleton className="h-96" />
+  if (!data || !banner || !maintenance || !features || !teams) return <Skeleton className="h-96" />
 
   const bannerDirty = JSON.stringify(banner) !== JSON.stringify(data.banner)
   const maintenanceDirty = JSON.stringify(maintenance) !== JSON.stringify(data.maintenance)
   const featuresDirty = JSON.stringify(features) !== JSON.stringify(data.features)
+  const teamsDirty = JSON.stringify(teams) !== JSON.stringify(data.teams)
+  const teamsValid = TEAM_IDS.every((t) => teams[t].name.trim() && teams[t].emoji.trim())
 
   return (
     <>
@@ -163,6 +168,29 @@ export function SettingsPage() {
             <p className="mt-4 flex items-start gap-1.5 text-xs text-gray-500">
               <ToggleLeft className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Chat, voice and AI switches apply to rooms as players (re)connect.
             </p>
+          </ChartCard>
+
+          <ChartCard title="Team names" subtitle="Default names for team battles — hosts can still rename teams in their room" right={<SaveButton busy={busy === 'teams'} dirty={teamsDirty && teamsValid} onClick={() => void save('teams', teams)} />}>
+            <div className="space-y-3" data-testid="team-names-settings">
+              {TEAM_IDS.map((t) => (
+                <div key={t} className="flex items-center gap-2">
+                  <span className={clsx('h-3 w-3 shrink-0 rounded-full', TEAMS[t].bar)} aria-hidden="true" />
+                  <input
+                    value={teams[t].emoji}
+                    onChange={(e) => setTeams({ ...teams, [t]: { ...teams[t], emoji: e.target.value.slice(0, 8) } })}
+                    aria-label={`Team ${t.toUpperCase()} emoji`}
+                    className="h-10 w-14 rounded-xl border border-white/10 bg-white/[0.05] text-center text-lg text-white outline-none focus:border-brand-400"
+                  />
+                  <input
+                    value={teams[t].name}
+                    onChange={(e) => setTeams({ ...teams, [t]: { ...teams[t], name: e.target.value.slice(0, 24) } })}
+                    aria-label={`Team ${t.toUpperCase()} name`}
+                    className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.05] px-3 text-sm text-white outline-none focus:border-brand-400"
+                    data-testid={`admin-team-${t}`}
+                  />
+                </div>
+              ))}
+            </div>
           </ChartCard>
         </div>
       </div>

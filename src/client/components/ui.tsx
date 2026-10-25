@@ -134,13 +134,23 @@ export function PlayerAvatar({
   name,
   size = 'md',
   dim,
+  speaking,
 }: {
   avatar: number
   photo?: string | null
   name?: string
   size?: 'sm' | 'md' | 'lg'
   dim?: boolean
+  /** Talking in the voice channel right now: the avatar glows. */
+  speaking?: boolean
 }) {
+  if (speaking !== undefined) {
+    return (
+      <span className={clsx('inline-flex shrink-0 rounded-full', speaking && 'talking-glow')} data-speaking={speaking ? 'true' : undefined} title={speaking ? `${name ?? 'Someone'} is talking` : undefined}>
+        <PlayerAvatar avatar={avatar} photo={photo} name={name} size={size} dim={dim} />
+      </span>
+    )
+  }
   if (!photo) return <Avatar index={avatar} size={size} dim={dim} />
   return (
     <img
