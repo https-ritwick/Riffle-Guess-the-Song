@@ -48,6 +48,17 @@ function applyPending(state: PublicState, pending: { patch: Partial<Settings>; a
   return Object.keys(patch).length ? { ...state, settings: { ...state.settings, ...pending.patch } } : state
 }
 const MAX_BACKOFF_MS = 8_000
+/** A message the room never confirmed stops showing as "sending" after this long. */
+const CHAT_PENDING_MS = 8_000
+
+let chatSeq = 0
+const chatCid = () => `${Date.now().toString(36)}-${(++chatSeq).toString(36)}`
+
+/** A chat message the room turned down (sent too fast): its text goes back in the box. */
+export interface ChatRejection {
+  id: number
+  text: string | null
+}
 
 export async function fetchRoomInfo(code: string): Promise<RoomInfo | null> {
   try {
@@ -74,6 +85,7 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
   const [reactions, setReactions] = useState<Reaction[]>([])
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null)
   const [chat, setChat] = useState<ChatMessage[]>([])
+  const [chatRejected, setChatRejected] = useState<ChatRejection | null>(null)
   /** Goes up every time the server seats us (first join and every reconnect). */
   const [seat, setSeat] = useState(0)
   const rtcHandler = useRef<((from: string, data: string) => void) | null>(null)
@@ -85,10 +97,39 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
   const bestRttRef = useRef(Infinity)
   const reactionId = useRef(0)
   const pendingSettings = useRef<{ patch: Partial<Settings>; at: number }>({ patch: {}, at: 0 })
+  // The latest state and seat, for showing your own chat messages the moment you send them.
+  const stateRef = useRef<PublicState | null>(null)
+  const youRef = useRef<string | null>(null)
+  const chatRef = useRef(chat)
+  stateRef.current = state
+  youRef.current = you
+  chatRef.current = chat
 
   const sendRaw = useCallback((msg: ClientMessage) => {
     const ws = wsRef.current
     if (ws?.readyState === WebSocket.OPEN) {
+      // Chat: show the message straight away; the room's echo (same cid) confirms it.
+      if (msg.t === 'chat' && !msg.cid) {
+        const cid = chatCid()
+        const me = stateRef.current?.players.find((p) => p.id === youRef.current)
+        if (me) {
+          const local: ChatMessage = {
+            id: `local:${cid}`,
+            cid,
+            pending: true,
+            from: me.id,
+            name: me.name,
+            avatar: me.avatar,
+            photo: me.photo,
+            at: Date.now() + offsetRef.current,
+            ...(msg.sticker ? { sticker: msg.sticker } : { text: msg.text ?? '' }),
+          }
+          setChat((c) => [...c.slice(-(CHAT_HISTORY - 1)), local])
+          window.setTimeout(() => setChat((c) => (c.some((m) => m.pending && m.cid === cid) ? c.map((m) => (m.pending && m.cid === cid ? { ...m, pending: false } : m)) : c)), CHAT_PENDING_MS)
+        }
+        ws.send(JSON.stringify({ ...msg, cid }))
+        return true
+      }
       ws.send(JSON.stringify(msg))
       // Show the host's own settings change immediately; the server echo confirms it.
       if (msg.t === 'settings') {
@@ -148,9 +189,23 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
         case 'chatHistory':
           setChat(msg.messages)
           break
-        case 'chat':
-          setChat((c) => (c.some((m) => m.id === msg.message.id) ? c : [...c.slice(-(CHAT_HISTORY - 1)), msg.message]))
+        case 'chat': {
+          const m = msg.message
+          setChat((c) => {
+            if (c.some((x) => x.id === m.id)) return c
+            // Our own message coming back: swap it in where it already shows.
+            const mine = m.cid ? c.findIndex((x) => x.cid === m.cid && x.id.startsWith('local:')) : -1
+            if (mine >= 0) return c.map((x, i) => (i === mine ? m : x))
+            return [...c.slice(-(CHAT_HISTORY - 1)), m]
+          })
           break
+        }
+        case 'chatRejected': {
+          const lost = chatRef.current.find((x) => x.cid === msg.cid && x.id.startsWith('local:'))
+          setChat((c) => c.filter((x) => x.cid !== msg.cid || !x.id.startsWith('local:')))
+          setChatRejected({ id: ++reactionId.current, text: lost?.text ?? null })
+          break
+        }
         case 'rtc':
           rtcHandler.current?.(msg.from, msg.data)
           break
@@ -295,5 +350,5 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
     rtcHandler.current = fn
   }, [])
 
-  return { status, state, you, error, reactions, suggestion, chat, seat, onRtc, onRelay, sendBinary, send: sendRaw, join, leave, serverNow, wantsSeat: nameRef.current !== null }
+  return { status, state, you, error, reactions, suggestion, chat, chatRejected, seat, onRtc, onRelay, sendBinary, send: sendRaw, join, leave, serverNow, wantsSeat: nameRef.current !== null }
 }

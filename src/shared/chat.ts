@@ -4,7 +4,9 @@
 export const MAX_CHAT_LENGTH = 300
 /** Messages the room keeps so people who join late (or refresh) see the conversation. */
 export const CHAT_HISTORY = 60
-export const CHAT_COOLDOWN_MS = 500
+/** Chat rate limit: a burst of this many messages, then one more every CHAT_REFILL_MS. */
+export const CHAT_BURST = 5
+export const CHAT_REFILL_MS = 700
 /** WebRTC offers/answers/ICE candidates relayed between players in the voice channel. */
 export const MAX_SIGNAL_LENGTH = 20_000
 
@@ -104,6 +106,10 @@ export interface ChatMessage {
   at: number
   text?: string
   sticker?: StickerId
+  /** The sender's own id for the message (matches the copy their screen showed while sending). */
+  cid?: string
+  /** Only on the sender's screen: not confirmed by the room yet. */
+  pending?: boolean
 }
 
 /** In the voice channel: listening with the mic muted, or talking. */

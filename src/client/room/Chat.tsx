@@ -1,11 +1,12 @@
 import clsx from 'clsx'
 import { Headphones, MessageCircle, Mic, MicOff, PhoneOff, SendHorizontal, Smile, Sticker, X } from 'lucide-react'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from 'react'
 import { EMOJI_SETS, findSticker, isEmojiOnly, MAX_CHAT_LENGTH, STICKERS, type ChatMessage, type StickerId } from '../../shared/chat'
 import type { PublicPlayer } from '../../shared/protocol'
 import { PlayerAvatar } from '../components/ui'
 import { useSite } from '../lib/site'
 import { load, save } from '../lib/storage'
+import type { ChatRejection } from '../lib/useRoom'
 import type { VoiceChannel, VoiceSnapshot } from '../lib/voice'
 import { useRoomContext } from './context'
 
@@ -38,10 +39,10 @@ function timeLabel(at: number) {
   return new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
-function Message({ m, mine, grouped }: { m: ChatMessage; mine: boolean; grouped: boolean }) {
+const Message = memo(function Message({ m, mine, grouped }: { m: ChatMessage; mine: boolean; grouped: boolean }) {
   const big = !!m.text && isEmojiOnly(m.text)
   return (
-    <li className={clsx('flex items-end gap-2', mine && 'flex-row-reverse', grouped ? 'mt-0.5' : 'mt-3')}>
+    <li className={clsx('flex items-end gap-2 transition-opacity duration-200', mine && 'flex-row-reverse', grouped ? 'mt-0.5' : 'mt-3', m.pending && 'opacity-60')} data-pending={m.pending ? '' : undefined}>
       <span className={clsx('w-7 shrink-0', grouped && 'invisible')}>
         <PlayerAvatar avatar={m.avatar} photo={m.photo} name={m.name} size="sm" />
       </span>
@@ -71,7 +72,38 @@ function Message({ m, mine, grouped }: { m: ChatMessage; mine: boolean; grouped:
       </div>
     </li>
   )
-}
+})
+
+/**
+ * The conversation. Kept apart from the message box so typing doesn't re-render
+ * every message, and it follows new messages unless you've scrolled up to read.
+ */
+const MessageList = memo(function MessageList({ messages, you, listRef, atBottom }: { messages: ChatMessage[]; you: string; listRef: RefObject<HTMLUListElement | null>; atBottom: RefObject<boolean> }) {
+  return (
+    <ul
+      ref={listRef}
+      onScroll={(e) => {
+        const el = e.currentTarget
+        atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
+      }}
+      className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3 [contain:content]"
+      aria-live="polite"
+      data-testid="chat-messages"
+    >
+      {messages.length === 0 && (
+        <li className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-gray-400">
+          <span className="text-4xl">💬</span>
+          Say hi, talk trash, drop a sticker.
+        </li>
+      )}
+      {messages.map((m, i) => {
+        const prev = messages[i - 1]
+        const grouped = !!prev && prev.from === m.from && m.at - prev.at < 60_000 && !m.sticker && !prev.sticker
+        return <Message key={m.cid ? `${m.from}:${m.cid}` : m.id} m={m} mine={m.from === you} grouped={grouped} />
+      })}
+    </ul>
+  )
+})
 
 type Picker = 'emoji' | 'sticker' | null
 
@@ -158,7 +190,7 @@ const OPEN_KEY = 'chat:open'
  * Room chat and voice channel: a dock in the corner with the voice controls and
  * a chat panel (text, emoji and stickers) that opens above it.
  */
-export function ChatDock({ messages, voice, snapshot, raised }: { messages: ChatMessage[]; voice: VoiceChannel; snapshot: VoiceSnapshot; raised?: boolean }) {
+export function ChatDock({ messages, rejected, voice, snapshot, raised }: { messages: ChatMessage[]; rejected?: ChatRejection | null; voice: VoiceChannel; snapshot: VoiceSnapshot; raised?: boolean }) {
   const { state, you, send, serverNow } = useRoomContext()
   const { features } = useSite()
   const [open, setOpen] = useState(() => load(OPEN_KEY) === '1' && window.matchMedia('(min-width: 1024px)').matches)
@@ -167,6 +199,7 @@ export function ChatDock({ messages, voice, snapshot, raised }: { messages: Chat
   /** Messages up to this time are read (what was said before you arrived doesn't count). */
   const [seenAt, setSeenAt] = useState(() => serverNow())
   const [peek, setPeek] = useState<ChatMessage | null>(null)
+  const [slowDown, setSlowDown] = useState(false)
   const list = useRef<HTMLUListElement>(null)
   const input = useRef<HTMLTextAreaElement>(null)
   const atBottom = useRef(true)
@@ -203,11 +236,27 @@ export function ChatDock({ messages, voice, snapshot, raised }: { messages: Chat
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [last?.id])
 
-  // Stay pinned to the newest message unless the reader scrolled up.
+  // Stay pinned to the newest message unless the reader scrolled up: new messages glide in,
+  // opening the panel (or a picker) jumps straight to the bottom.
+  const jumped = useRef({ open, picker })
   useLayoutEffect(() => {
     const el = list.current
-    if (el && (atBottom.current || last?.from === you)) el.scrollTop = el.scrollHeight
+    const layout = jumped.current.open !== open || jumped.current.picker !== picker
+    jumped.current = { open, picker }
+    if (!el || !(atBottom.current || last?.from === you || layout)) return
+    if (layout) el.scrollTop = el.scrollHeight
+    else el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    atBottom.current = true
   }, [messages.length, open, picker, last?.from, you])
+
+  // A message the room turned down (too many too fast): put it back in the box.
+  useEffect(() => {
+    if (!rejected) return
+    if (rejected.text) setDraft((d) => d || rejected.text!)
+    setSlowDown(true)
+    const t = window.setTimeout(() => setSlowDown(false), 2500)
+    return () => clearTimeout(t)
+  }, [rejected])
 
   useEffect(() => {
     if (!open) return
@@ -261,7 +310,8 @@ export function ChatDock({ messages, voice, snapshot, raised }: { messages: Chat
       {open && (
         <section
           className={clsx(
-            'fixed right-3 z-50 flex w-[min(23rem,calc(100vw-1.5rem))] animate-pop flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#1a0f27]/95 shadow-2xl backdrop-blur-xl sm:right-5',
+            // Solid, not frosted: a blur over the ticking game behind it makes phones stutter.
+            'fixed right-3 z-50 flex w-[min(23rem,calc(100vw-1.5rem))] animate-pop flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#1a0f27] shadow-2xl sm:right-5',
             raised ? 'bottom-40 h-[min(32rem,calc(100dvh-12rem))] lg:bottom-24 lg:h-[min(34rem,calc(100dvh-8rem))]' : 'bottom-24 h-[min(34rem,calc(100dvh-8rem))]',
           )}
           aria-label="Room chat"
@@ -312,28 +362,12 @@ export function ChatDock({ messages, voice, snapshot, raised }: { messages: Chat
             </div>
           </header>
 
-          <ul
-            ref={list}
-            onScroll={(e) => {
-              const el = e.currentTarget
-              atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40
-            }}
-            className="min-h-0 flex-1 overflow-y-auto px-3 pb-3"
-            aria-live="polite"
-            data-testid="chat-messages"
-          >
-            {messages.length === 0 && (
-              <li className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-gray-400">
-                <span className="text-4xl">💬</span>
-                Say hi, talk trash, drop a sticker.
-              </li>
-            )}
-            {messages.map((m, i) => {
-              const prev = messages[i - 1]
-              const grouped = !!prev && prev.from === m.from && m.at - prev.at < 60_000 && !m.sticker && !prev.sticker
-              return <Message key={m.id} m={m} mine={m.from === you} grouped={grouped} />
-            })}
-          </ul>
+          <MessageList messages={messages} you={you} listRef={list} atBottom={atBottom} />
+          {slowDown && (
+            <p role="status" className="border-t border-white/10 px-3 py-1.5 text-center text-xs text-amber-200">
+              Whoa, slow down — that one didn’t send. Try again in a sec.
+            </p>
+          )}
 
           {picker === 'emoji' && <EmojiPicker onPick={insertEmoji} />}
           {picker === 'sticker' && <StickerPicker onPick={sendSticker} />}
@@ -391,7 +425,7 @@ export function ChatDock({ messages, voice, snapshot, raised }: { messages: Chat
           onClick={() => setOpen(true)}
           className={clsx(
             // Phones: above the dock. Wider screens: beside it, clear of the page's buttons.
-            'fixed right-3 z-40 flex max-w-[min(18rem,calc(100vw-1.5rem))] animate-pop items-center gap-2 rounded-2xl rounded-br-md border border-white/10 bg-[#1a0f27]/95 py-2 pr-3 pl-2 text-left shadow-xl backdrop-blur sm:right-[12.5rem]',
+            'fixed right-3 z-40 flex max-w-[min(18rem,calc(100vw-1.5rem))] animate-pop items-center gap-2 rounded-2xl rounded-br-md border border-white/10 bg-[#1a0f27] py-2 pr-3 pl-2 text-left shadow-xl sm:right-[12.5rem]',
             raised ? 'bottom-40 sm:bottom-24 lg:bottom-5' : 'bottom-24 sm:bottom-5',
           )}
         >
@@ -405,7 +439,7 @@ export function ChatDock({ messages, voice, snapshot, raised }: { messages: Chat
 
       <div
         className={clsx(
-          'fixed right-3 z-40 flex items-center gap-1.5 rounded-full border border-white/10 bg-[#1a0f27]/90 p-1.5 shadow-xl backdrop-blur-xl sm:right-5',
+          'fixed right-3 z-40 flex items-center gap-1.5 rounded-full border border-white/10 bg-[#1a0f27]/95 p-1.5 shadow-xl sm:right-5',
           raised ? 'bottom-24 lg:bottom-5' : 'bottom-5',
         )}
         data-testid="chat-dock"

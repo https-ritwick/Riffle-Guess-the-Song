@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers'
 import { pickAwardNames, type AwardName } from '../shared/awards'
-import { CHAT_COOLDOWN_MS, CHAT_HISTORY, sanitizeChat, type ChatMessage, type VoiceState } from '../shared/chat'
+import { CHAT_BURST, CHAT_HISTORY, CHAT_REFILL_MS, sanitizeChat, type ChatMessage, type VoiceState } from '../shared/chat'
 import { findPreset } from '../shared/catalog'
 import { dailySettings, seededRandom } from '../shared/daily'
 import { buildChallengeQuestions, CHALLENGE_QUESTION, summarize, type ChallengeItem, type ChallengePrompt, type GameKind } from '../shared/challenges'
@@ -146,6 +146,8 @@ interface GameRecord {
   removed?: Record<string, number[]>
   notes?: Record<string, string>
   retried?: Record<string, boolean>
+  /** This round: who lost points to someone's Robin Hood, and what they were told. */
+  alerts?: Record<string, string>
   /** Any TV / big screen watched this game. */
   tv?: boolean
 }
@@ -196,6 +198,8 @@ interface Attachment {
   pid: string | null
   lastReaction: number
   lastChat?: number
+  /** Chat messages this connection may still send right away (refills over time). */
+  chatBudget?: number
   user: SessionIdentity | null
   member: boolean
   geo?: PlayerGeo | null
@@ -604,10 +608,14 @@ export class GameRoom extends DurableObject<Env> {
       }
 
       case 'chat': {
-        if (room.solo || att.off?.includes('chat') || now - (att.lastChat ?? 0) < CHAT_COOLDOWN_MS) return false
+        // A short burst is fine (quick back-and-forth); a flood is not.
+        const budget = Math.min(CHAT_BURST, (att.chatBudget ?? CHAT_BURST) + (now - (att.lastChat ?? 0)) / CHAT_REFILL_MS)
         const text = msg.text !== undefined ? sanitizeChat(msg.text) : ''
-        if (!text && !msg.sticker) return false
-        ws.serializeAttachment({ ...att, lastChat: now } satisfies Attachment)
+        if (room.solo || att.off?.includes('chat') || budget < 1 || (!text && !msg.sticker)) {
+          if (msg.cid) this.send(ws, { t: 'chatRejected', cid: msg.cid })
+          return false
+        }
+        ws.serializeAttachment({ ...att, lastChat: now, chatBudget: budget - 1 } satisfies Attachment)
         const message: ChatMessage = {
           id: newId(),
           from: player.id,
@@ -616,6 +624,7 @@ export class GameRoom extends DurableObject<Env> {
           photo: player.photo,
           at: now,
           ...(msg.sticker ? { sticker: msg.sticker } : { text }),
+          ...(msg.cid ? { cid: msg.cid } : {}),
         }
         this.chat = [...this.chat.slice(-(CHAT_HISTORY - 1)), message]
         this.activity().chats += 1
@@ -1092,7 +1101,7 @@ export class GameRoom extends DurableObject<Env> {
     game.answers[player.id] = { choice, at: now, ms: elapsed, correct, points, applied: live, first, ...(power ? { power } : {}), ...(steal ? { steal } : {}) }
     if (live) {
       this.applyResult(player, correct, points, power === 'shield')
-      if (correct && power === 'rob') this.rob(player, game.answers[player.id]!)
+      if (power === 'rob') this.rob(player, game.answers[player.id]!)
     }
     if (this.everyoneAnswered()) this.reveal(now)
     return true
@@ -1117,6 +1126,8 @@ export class GameRoom extends DurableObject<Env> {
     if (!room.settings.powerUps || !room.settings.powers.includes(power) || room.phase !== 'question' || !game || round !== game.index) return false
     if (game.answers[player.id] || game.powers?.[player.id] || player.powersUsed?.includes(power)) return false
     if (POWERS[power].rivals && room.players.filter((p) => p.connected).length < 2) return false
+    // The host can keep Double off a final round that already scores double.
+    if (power === 'double' && !room.settings.finalDouble && this.isDoubleRound()) return false
     game.powers = { ...game.powers, [player.id]: power }
     player.powersUsed = [...(player.powersUsed ?? []), power]
     if (power === 'fifty') {
@@ -1134,16 +1145,31 @@ export class GameRoom extends DurableObject<Env> {
     return true
   }
 
-  /** Robin Hood: a right answer also takes points from whoever leads (not you). */
+  /**
+   * Robin Hood: a right answer also takes points from the top-scoring rival
+   * (on the other team in a team battle). Either way, the player hears what happened.
+   */
   private rob(player: PlayerRecord, answer: AnswerRecord): void {
-    const game = this.room!.game
-    const leader = this.room!.players.filter((p) => p.id !== player.id && p.score > 0).sort((a, b) => b.score - a.score)[0]
-    if (!leader || !game) return
+    const room = this.room!
+    const game = room.game
+    if (!game) return
+    const note = (text: string) => (game.notes = { ...game.notes, [player.id]: text })
+    if (!answer.correct) {
+      note('Robin Hood missed — only a right answer steals points.')
+      return
+    }
+    const rivals = room.players.filter((p) => p.id !== player.id && p.score > 0 && !(room.settings.teams && player.team && p.team === player.team))
+    const leader = rivals.sort((a, b) => b.score - a.score)[0]
+    if (!leader) {
+      note('Robin Hood: nobody had points to take yet.')
+      return
+    }
     const taken = Math.min(ROB_POINTS, leader.score)
     leader.score -= taken
     player.score += taken
     answer.points += taken
-    game.notes = { ...game.notes, [player.id]: `Robin Hood: you took ${taken} points from ${leader.name}!` }
+    note(`Robin Hood: you took ${taken} points from ${leader.name}!`)
+    game.alerts = { ...game.alerts, [leader.id]: `${player.name}’s Robin Hood took ${taken} of your points!` }
   }
 
   /** Antakshari team battles: teams take turns, starting with Team Jai. */
@@ -1232,6 +1258,7 @@ export class GameRoom extends DurableObject<Env> {
           game.removed = {}
           game.notes = {}
           game.retried = {}
+          game.alerts = {}
           this.startQuestion(game, now)
         } else {
           this.finish()
@@ -1263,14 +1290,20 @@ export class GameRoom extends DurableObject<Env> {
     const question = game.questions[game.index]!
 
     const picks: Record<string, Pick> = {}
+    const robbers: PlayerRecord[] = []
     for (const p of room.players) {
       const a = game.answers[p.id]
       if (!a) p.streak = 0
       else if (!a.applied) {
         this.applyResult(p, a.correct, a.points, a.power === 'shield')
-        if (a.correct && a.power === 'rob') this.rob(p, a)
+        if (a.power === 'rob') robbers.push(p)
         a.applied = true
       }
+    }
+    // Robin Hood goes after everyone's points for this round are in, so it robs the real leader.
+    for (const p of robbers) this.rob(p, game.answers[p.id]!)
+    for (const p of room.players) {
+      const a = game.answers[p.id]
       picks[p.id] = {
         choice: a ? a.choice : null,
         points: a?.points ?? 0,
@@ -1818,6 +1851,7 @@ export class GameRoom extends DurableObject<Env> {
               nextLetter: room.settings.antakshari && room.phase === 'reveal' && next ? (next.letter ?? null) : null,
               turn: this.turnTeam(game.index),
               yourNote: pid && answering ? (game.notes?.[pid] ?? null) : null,
+              yourAlert: pid && answering ? (game.alerts?.[pid] ?? null) : null,
               peek:
                 pid && room.phase === 'question' && game.powers?.[pid] === 'peek'
                   ? [0, 1, 2, 3].map((i) => Object.entries(game.answers).filter(([id, a]) => id !== pid && a.choice === i).length)
@@ -1841,9 +1875,10 @@ export class GameRoom extends DurableObject<Env> {
   }
 
   private async commit(): Promise<void> {
+    // Players see the change first: anything sent after a storage write waits until the write is durable.
+    this.broadcastState()
     await this.persist()
     await this.schedule()
-    this.broadcastState()
   }
 
   private async persist(): Promise<void> {

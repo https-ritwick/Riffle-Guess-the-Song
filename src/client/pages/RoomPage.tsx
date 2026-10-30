@@ -164,7 +164,7 @@ function SoundBlockedBanner() {
 
 function RoomView({ code }: { code: string }) {
   const room = useRoom(code)
-  const { status, state, you, error, send, join, leave, serverNow, reactions, wantsSeat, suggestion, chat, seat, onRtc, onRelay, sendBinary } = room
+  const { status, state, you, error, send, join, leave, serverNow, reactions, wantsSeat, suggestion, chat, chatRejected, seat, onRtc, onRelay, sendBinary } = room
   const [joining, setJoining] = useState(false)
   const { features } = useSite()
   const { voice, snapshot: voiceState, onSignal, onRelay: onVoicePacket } = useVoice(send, you, state?.players, seat, sendBinary)
@@ -296,7 +296,7 @@ function RoomView({ code }: { code: string }) {
           <GameView />
         )}
         <Reactions reactions={reactions} players={ctx.state.players} />
-        {(features.chat || features.voice) && <ChatDock messages={chat} voice={voice} snapshot={voiceState} raised={phase === 'lobby'} />}
+        {(features.chat || features.voice) && <ChatDock messages={chat} rejected={chatRejected} voice={voice} snapshot={voiceState} raised={phase === 'lobby'} />}
         {/* Room to scroll the page clear of the chat dock. */}
         {!ctx.state.solo && <div aria-hidden="true" className="h-16" />}
         <SoundBlockedBanner />

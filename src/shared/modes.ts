@@ -17,7 +17,7 @@ export const POWERS: Record<PowerId, { name: string; hint: string; /** Needs oth
   shield: { name: 'Shield', hint: 'A wrong answer costs nothing and keeps your streak' },
   hint: { name: 'Hint', hint: 'Shows the first letter of the answer (and the year for songs)' },
   retry: { name: 'Second chance', hint: 'If your first answer is wrong, pick again for half points' },
-  rob: { name: 'Robin Hood', hint: 'A right answer also takes 150 points from the leader', rivals: true },
+  rob: { name: 'Robin Hood', hint: 'A right answer also takes up to 150 points from the top-scoring rival', rivals: true },
   peek: { name: 'Crowd peek', hint: 'See how many players picked each answer so far', rivals: true },
 }
 

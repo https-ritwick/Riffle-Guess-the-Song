@@ -510,6 +510,17 @@ function SettingsCard() {
               )
             })}
           </div>
+          {s.powers.includes('double') && (
+            <div className="mt-4 border-t border-gray-800 pt-4" data-testid="final-double">
+              <Toggle
+                label="Double power-up in the final round"
+                hint={s.doubleFinal ? `Lets Double turn the ×2 final ${songs ? 'song' : 'question'} into ×4` : `Lets players use Double on the last ${songs ? 'song' : 'question'}`}
+                checked={s.finalDouble}
+                disabled={!isHost}
+                onChange={(finalDouble) => update({ finalDouble })}
+              />
+            </div>
+          )}
         </fieldset>
       )}
     </Card>

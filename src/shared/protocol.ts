@@ -115,6 +115,8 @@ const SettingsShape = {
   powerUps: z.boolean(),
   /** Which power-ups are in play. */
   powers: z.array(z.enum(POWER_IDS)).max(POWER_IDS.length),
+  /** The Double power-up can be used on a double-points final round (×4). */
+  finalDouble: z.boolean(),
   /** The host's names for the two teams (null: the site's default names). */
   teamNames: z.object({ a: TeamNameSchema, b: TeamNameSchema }).nullable(),
   /** Two teams; the team with the best average score wins. */
@@ -132,6 +134,7 @@ export const SettingsSchema = z.object({
   game: SettingsShape.game.default('songs'),
   powerUps: SettingsShape.powerUps.default(false),
   powers: SettingsShape.powers.default([...POWER_IDS]),
+  finalDouble: SettingsShape.finalDouble.default(true),
   teamNames: SettingsShape.teamNames.default(null),
   teams: SettingsShape.teams.default(false),
   antakshari: SettingsShape.antakshari.default(false),
@@ -157,6 +160,7 @@ export const DEFAULT_SETTINGS: Settings = {
   game: 'songs',
   powerUps: false,
   powers: [...POWER_IDS],
+  finalDouble: true,
   teamNames: null,
   teams: false,
   antakshari: false,
@@ -211,7 +215,13 @@ export const ClientMessageSchema = z.discriminatedUnion('t', [
   /** Remove one of your Blend sources, or all of them. */
   z.object({ t: z.literal('unblend'), index: z.number().int().min(0).max(MAX_BLEND_SOURCES).optional() }),
   /** A chat message: some text (emoji welcome) or one sticker. */
-  z.object({ t: z.literal('chat'), text: z.string().max(MAX_CHAT_LENGTH * 2).optional(), sticker: z.enum(STICKER_IDS).optional() }),
+  z.object({
+    t: z.literal('chat'),
+    text: z.string().max(MAX_CHAT_LENGTH * 2).optional(),
+    sticker: z.enum(STICKER_IDS).optional(),
+    /** The sender's id for this message, echoed back so it replaces the copy shown while sending. */
+    cid: z.string().max(40).optional(),
+  }),
   /** Join the voice channel (muted or talking), or leave it (null). */
   z.object({ t: z.literal('voice'), state: z.enum(['muted', 'live']).nullable() }),
   /** WebRTC signalling (offer / answer / ICE candidate as JSON) for another player in the voice channel. */
@@ -325,6 +335,8 @@ export interface PublicRound {
   turn: TeamId | null
   /** Just for you: a Hint, a Second chance or what Robin Hood took. */
   yourNote: string | null
+  /** Just for you: someone's Robin Hood took your points this round. */
+  yourAlert: string | null
   /** Crowd peek: how many players picked each option so far. */
   peek: number[] | null
 }
@@ -396,6 +408,8 @@ export type ServerMessage =
   | { t: 'reaction'; from: string; emoji: string }
   | { t: 'suggestion'; from: string; source: Source }
   | { t: 'chat'; message: ChatMessage }
+  /** Your chat message wasn't sent (too fast, or chat is off). */
+  | { t: 'chatRejected'; cid: string }
   | { t: 'chatHistory'; messages: ChatMessage[] }
   | { t: 'rtc'; from: string; data: string }
 

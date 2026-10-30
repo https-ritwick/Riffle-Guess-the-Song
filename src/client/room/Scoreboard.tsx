@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { ArrowDown, ArrowUp, ChevronDown, Crown } from 'lucide-react'
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Phase, PublicPlayer } from '../../shared/protocol'
 import { PlayerAvatar } from '../components/ui'
 import { useTeamLabels } from '../lib/teams'
@@ -41,7 +41,8 @@ export function rankPlayers(players: PublicPlayer[]): PublicPlayer[] {
  * Live, ranked leaderboard. Rows glide to their new positions (FLIP) whenever
  * scores change; arrows show who just moved up or down.
  */
-export function Scoreboard({ players, you, hostId, phase }: { players: PublicPlayer[]; you: string; hostId: string | null; phase: Phase }) {
+/** Memoised: the game screen re-renders 10× a second for its timer; the board only needs new scores. */
+export const Scoreboard = memo(function Scoreboard({ players, you, hostId, phase }: { players: PublicPlayer[]; you: string; hostId: string | null; phase: Phase }) {
   const ranked = rankPlayers(players)
   const { speaking, state } = useRoomContext()
   const labels = useTeamLabels(state.settings)
@@ -160,4 +161,4 @@ export function Scoreboard({ players, you, hostId, phase }: { players: PublicPla
       ) : null}
     </section>
   )
-}
+})

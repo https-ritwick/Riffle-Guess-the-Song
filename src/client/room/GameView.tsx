@@ -1,6 +1,6 @@
 import clsx from 'clsx'
-import { ArrowRight, ExternalLink, Flag, Lock, Sparkles, Tv, Volume2, VolumeX, Zap } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowRight, ExternalLink, Flag, HandCoins, Lock, Sparkles, Tv, Volume2, VolumeX, Zap } from 'lucide-react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CHALLENGE_QUESTION } from '../../shared/challenges'
 import type { PublicPlayer, PublicRound, QuestionMode } from '../../shared/protocol'
 import { MAX_STREAK_BONUS, REVEAL_MS, STREAK_BONUS } from '../../shared/rules'
@@ -196,7 +196,7 @@ function NextUp({ endsAt, now, last, double, noun }: { endsAt: number | null; no
  * The record and its sleeve. While you guess, the record spins out of a blank
  * sleeve; at the reveal the sleeve flips to the real album art.
  */
-export function VinylStage({ round, spinning }: { round: PublicRound; spinning: boolean }) {
+export const VinylStage = memo(function VinylStage({ round, spinning }: { round: PublicRound; spinning: boolean }) {
   const { state } = useRoomContext()
   const track = round.reveal?.track
   const flipped = !!track
@@ -278,7 +278,7 @@ export function VinylStage({ round, spinning }: { round: PublicRound; spinning: 
       </div>
     </div>
   )
-}
+})
 
 const HYPE: Record<number, string> = { 3: '🔥 Hat-trick!', 4: '⚡ On fire!', 5: '💥 Unstoppable!', 7: '👑 Shahenshah mode!', 10: '🐐 Legendary!' }
 
@@ -386,7 +386,7 @@ export const OPTION_STYLES = [
   { letter: 'D', badge: 'bg-emerald-400 text-black', tint: 'from-emerald-500/30', buzz: 'from-emerald-500/25' },
 ] as const
 
-function Choices({ round, players, onAnswer, locked, buzzer }: { round: PublicRound; players: PublicPlayer[]; onAnswer: (i: number) => void; locked: boolean; buzzer: boolean }) {
+const Choices = memo(function Choices({ round, players, onAnswer, locked, buzzer }: { round: PublicRound; players: PublicPlayer[]; onAnswer: (i: number) => void; locked: boolean; buzzer: boolean }) {
   const reveal = round.reveal
   const correctIndex = reveal?.correct ?? round.yourResult?.correctIndex
   const pickers = (i: number) => (reveal ? players.filter((p) => reveal.picks[p.id]?.choice === i) : [])
@@ -422,7 +422,7 @@ function Choices({ round, players, onAnswer, locked, buzzer }: { round: PublicRo
             className={clsx(
               'group relative flex overflow-hidden rounded-2xl border text-left transition-all duration-200',
               // Phones: tall 2×2 buzzers. Wider screens: a row with the cover.
-              'min-h-[5.5rem] flex-col justify-between gap-2 bg-linear-to-br to-transparent p-2.5 sm:min-h-20 sm:flex-row sm:items-center sm:justify-start sm:gap-3 sm:bg-none sm:p-2.5 sm:pr-4',
+              'min-h-[5.5rem] touch-manipulation flex-col justify-between gap-2 bg-linear-to-br to-transparent p-2.5 select-none sm:min-h-20 sm:flex-row sm:items-center sm:justify-start sm:gap-3 sm:bg-none sm:p-2.5 sm:pr-4',
               buzzer && 'min-h-[7.5rem] sm:min-h-24',
               !known && !gone && round.yourChoice === null && style.buzz,
               tone,
@@ -436,7 +436,7 @@ function Choices({ round, players, onAnswer, locked, buzzer }: { round: PublicRo
               {art && <img src={art} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover ring-1 ring-white/10 sm:h-15 sm:w-15 sm:rounded-xl" />}
             </span>
             {text ? (
-              <span className={clsx('min-w-0 font-semibold leading-snug break-words text-white sm:flex-1', gone && 'line-through', buzzer ? 'text-base sm:text-lg' : 'text-[15px] sm:text-base', 'line-clamp-3')}>{text}</span>
+              <span className={clsx('min-w-0 font-semibold leading-snug break-words text-white [overflow-wrap:anywhere] sm:flex-1', gone && 'line-through', buzzer ? 'text-base sm:text-lg' : 'text-[15px] sm:text-base', 'line-clamp-4 sm:line-clamp-3')}>{text}</span>
             ) : (
               <span className="h-4 w-3/4 animate-pulse rounded bg-white/10" />
             )}
@@ -459,34 +459,50 @@ function Choices({ round, players, onAnswer, locked, buzzer }: { round: PublicRo
       })}
     </div>
   )
-}
+})
 
 /** Power-ups: each allowed one once per game, one per round, used before answering. */
-function PowerBar({ round, powers, allowed, solo, phase, onUse }: { round: PublicRound; powers: PowerId[]; allowed: PowerId[]; solo: boolean; phase: string; onUse: (p: PowerId) => void }) {
+function PowerBar({ round, powers, allowed, solo, phase, finalDouble, onUse }: { round: PublicRound; powers: PowerId[]; allowed: PowerId[]; solo: boolean; phase: string; finalDouble: boolean; onUse: (p: PowerId) => void }) {
   const open = phase === 'question' && round.yourChoice === null && !round.yourPower
   const shown = POWER_IDS.filter((id) => allowed.includes(id) && !(solo && POWERS[id].rivals))
   if (!shown.length) return null
   return (
-    <div className="-mx-1 flex items-stretch gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] sm:flex-wrap sm:gap-2 sm:overflow-visible" role="group" aria-label="Power-ups" data-testid="power-bar">
+    <div
+      className="grid gap-1.5 sm:flex sm:flex-wrap sm:gap-2"
+      style={{ gridTemplateColumns: `repeat(${Math.min(4, shown.length)}, minmax(0, 1fr))` }}
+      role="group"
+      aria-label="Power-ups"
+      data-testid="power-bar"
+    >
       {shown.map((id) => {
         const has = powers.includes(id)
         const active = round.yourPower === id
+        // The host can keep Double off a final round that already scores ×2.
+        const offFinal = id === 'double' && round.double && !finalDouble
+        const why = offFinal ? ' (not on the final round)' : has ? '' : ' (used)'
         return (
           <button
             key={id}
             type="button"
-            disabled={!open || !has}
+            disabled={!open || !has || offFinal}
             onClick={() => onUse(id)}
-            title={POWERS[id].hint}
+            title={`${POWERS[id].hint}${why}`}
             aria-pressed={active}
             data-testid={`power-${id}`}
-            aria-label={`${POWERS[id].name}: ${POWERS[id].hint}${has ? '' : ' (used)'}`}
+            aria-label={`${POWERS[id].name}: ${POWERS[id].hint}${why}`}
             className={clsx(
-              'flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-2 text-xs font-bold whitespace-nowrap ring-1 transition sm:text-sm',
-              active ? 'bg-white text-gray-900 ring-white' : has ? 'bg-white/[0.06] text-white ring-white/10 enabled:hover:bg-white/[0.12] disabled:opacity-60' : 'bg-transparent text-gray-600 line-through ring-white/5 [&_svg]:opacity-40',
+              'flex min-w-0 touch-manipulation flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-center text-[11px] leading-tight font-bold ring-1 transition active:scale-95',
+              'sm:flex-row sm:gap-1.5 sm:px-2.5 sm:py-2 sm:text-sm sm:whitespace-nowrap',
+              active
+                ? 'bg-white text-gray-900 ring-white shadow-[0_0_18px_-4px] shadow-white/60'
+                : has && !offFinal
+                  ? 'bg-white/[0.06] text-white ring-white/10 enabled:hover:bg-white/[0.12] disabled:opacity-50'
+                  : 'bg-transparent text-gray-600 ring-white/5 [&_svg]:opacity-40',
+              !has && !active && 'line-through',
             )}
           >
-            <PowerIcon id={id} className={clsx('h-4 w-4', active && '!text-gray-900')} /> {POWERS[id].name}
+            <PowerIcon id={id} className={clsx('h-4 w-4', active && '!text-gray-900')} />
+            <span className="max-w-full break-words">{POWERS[id].name}</span>
           </button>
         )
       })}
@@ -729,14 +745,37 @@ export function GameView() {
     [round, looked],
   )
 
+  // A power-up you just tapped shows as on straight away; the room confirms it a moment later.
+  const [pendingPower, setPendingPower] = useState<{ round: number; power: PowerId } | null>(null)
+  useEffect(() => {
+    if (!pendingPower) return
+    // Turned down (or the round moved on): stop showing it.
+    const t = window.setTimeout(() => setPendingPower(null), 2500)
+    return () => clearTimeout(t)
+  }, [pendingPower])
+
   const localRound = useMemo<PublicRound>(() => {
-    if (round.yourChoice === null && pending && pending.round === round.index && phase === 'question') {
-      return { ...round, yourChoice: pending.choice }
+    let r = round
+    // Your answer shows as locked in before the room confirms it, unless a Second chance took that option away.
+    if (r.yourChoice === null && pending && pending.round === r.index && phase === 'question' && !r.removed?.includes(pending.choice)) {
+      r = { ...r, yourChoice: pending.choice }
     }
-    return round
-  }, [round, pending, phase])
+    if (!r.yourPower && pendingPower && pendingPower.round === r.index && phase === 'question') {
+      r = { ...r, yourPower: pendingPower.power }
+    }
+    return r
+  }, [round, pending, pendingPower, phase])
 
   useRoundSfx(localRound, phase, now)
+
+  // Second chance: the wrong pick buzzes, then you pick again.
+  const retried = round.yourPower === 'retry' ? (round.removed?.length ?? 0) : 0
+  useEffect(() => {
+    if (!retried || phase !== 'question') return
+    playSfx('wrong')
+    vibrate([40, 30, 40])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retried, round.index])
 
   const locked = phase !== 'question' || localRound.yourChoice !== null || round.endsAt <= now
 
@@ -748,10 +787,17 @@ export function GameView() {
     setPending({ round: round.index, choice })
     send({ t: 'answer', round: round.index, choice })
   }
+  // The answer buttons only re-render when the round changes, not on every timer tick.
+  const answerRef = useRef(answer)
+  answerRef.current = answer
+  const onAnswer = useCallback((i: number) => answerRef.current(i), [])
   const next = () => send({ t: 'next' })
   const activatePower = (power: PowerId) => {
-    if (locked) return
+    if (locked || localRound.yourPower || !me?.powers.includes(power)) return
+    if (power === 'double' && round.double && !state.settings.finalDouble) return
     playSfx('pop')
+    vibrate(15)
+    setPendingPower({ round: round.index, power })
     send({ t: 'power', round: round.index, power })
   }
 
@@ -855,15 +901,21 @@ export function GameView() {
                 <div key={`${round.index}:${outcome?.kind ?? ''}`} className={clsx('relative min-w-0 flex-1', outcome?.kind === 'wrong' && 'animate-shake')}>
                   {state.settings.powerUps && me && (
                     <div className="mb-2.5 sm:mb-3">
-                      <PowerBar round={localRound} powers={me.powers} allowed={state.settings.powers} solo={state.solo} phase={phase} onUse={activatePower} />
+                      <PowerBar round={localRound} powers={me.powers} allowed={state.settings.powers} solo={state.solo} phase={phase} finalDouble={state.settings.finalDouble} onUse={activatePower} />
                     </div>
                   )}
-                  {round.yourNote && phase !== 'countdown' && (
-                    <p className="mb-2.5 flex items-center gap-2 rounded-xl bg-yellow-300/10 px-3 py-2 text-sm font-semibold text-yellow-100 ring-1 ring-yellow-300/20 sm:mb-3" data-testid="power-note">
-                      {round.yourPower && <PowerIcon id={round.yourPower} className="h-4 w-4" />} {round.yourNote}
+                  {round.yourAlert && phase !== 'countdown' && (
+                    <p className="mb-2.5 flex animate-pop items-center gap-2 rounded-xl bg-rose-500/15 px-3 py-2 text-sm font-semibold text-rose-100 ring-1 ring-rose-400/30 sm:mb-3" data-testid="power-alert">
+                      <HandCoins className="h-4 w-4 shrink-0 text-rose-300" /> {round.yourAlert}
                     </p>
                   )}
-                  <Choices round={localRound} players={state.players} onAnswer={answer} locked={locked} buzzer={tv} />
+                  {phase !== 'countdown' && (round.yourNote || (localRound.yourPower && phase === 'question' && localRound.yourChoice === null)) && (
+                    <p key={round.yourNote ?? localRound.yourPower} className="mb-2.5 flex animate-pop items-center gap-2 rounded-xl bg-yellow-300/10 px-3 py-2 text-sm font-semibold text-yellow-100 ring-1 ring-yellow-300/20 sm:mb-3" data-testid="power-note">
+                      {localRound.yourPower && <PowerIcon id={localRound.yourPower} className="h-4 w-4" />}
+                      <span className="min-w-0">{round.yourNote ?? `${POWERS[localRound.yourPower!].name} is on — ${POWERS[localRound.yourPower!].hint.charAt(0).toLowerCase()}${POWERS[localRound.yourPower!].hint.slice(1)}`}</span>
+                    </p>
+                  )}
+                  <Choices round={localRound} players={state.players} onAnswer={onAnswer} locked={locked} buzzer={tv} />
                   {outcome?.kind === 'right' && (
                     <span aria-hidden="true" className="pointer-events-none absolute top-1/3 left-1/2 -translate-x-1/2 animate-float-up text-5xl font-black text-emerald-300 drop-shadow-[0_4px_20px_rgba(16,185,129,0.6)]">
                       +{outcome.points}
