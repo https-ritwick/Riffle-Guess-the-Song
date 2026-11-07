@@ -5,7 +5,7 @@ import { GUESS_SECONDS_OPTIONS, REGION_CODES, ROUND_OPTIONS } from './catalog'
 import type { AwardName } from './awards'
 import type { ChallengePrompt } from './challenges'
 import { REACTIONS } from './rules'
-import { MAX_CHAT_LENGTH, MAX_SIGNAL_LENGTH, STICKER_IDS, type ChatMessage, type VoiceState } from './chat'
+import { MAX_CHAT_LENGTH, MAX_SIGNAL_LENGTH, STICKER_IDS, type ChatMessage, type ChatReceipts, type VoiceState } from './chat'
 import { POWER_IDS, TEAM_IDS, TeamNameSchema, type PowerId, type TeamId, type TeamStanding } from './modes'
 
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
@@ -221,7 +221,13 @@ export const ClientMessageSchema = z.discriminatedUnion('t', [
     sticker: z.enum(STICKER_IDS).optional(),
     /** The sender's id for this message, echoed back so it replaces the copy shown while sending. */
     cid: z.string().max(40).optional(),
+    /** Id of the message this one replies to. */
+    replyTo: z.string().max(40).optional(),
   }),
+  /** Started (or still) typing a chat message, or stopped. */
+  z.object({ t: z.literal('typing'), on: z.boolean() }),
+  /** Read the chat up to this message time. */
+  z.object({ t: z.literal('seen'), at: z.number().finite().nonnegative() }),
   /** Join the voice channel (muted or talking), or leave it (null). */
   z.object({ t: z.literal('voice'), state: z.enum(['muted', 'live']).nullable() }),
   /** WebRTC signalling (offer / answer / ICE candidate as JSON) for another player in the voice channel. */
@@ -410,7 +416,11 @@ export type ServerMessage =
   | { t: 'chat'; message: ChatMessage }
   /** Your chat message wasn't sent (too fast, or chat is off). */
   | { t: 'chatRejected'; cid: string }
-  | { t: 'chatHistory'; messages: ChatMessage[] }
+  | { t: 'chatHistory'; messages: ChatMessage[]; receipts: ChatReceipts }
+  /** Who has received and read the chat up to where. */
+  | { t: 'receipts'; receipts: ChatReceipts }
+  /** Someone started or stopped typing in the chat. */
+  | { t: 'typing'; from: string; on: boolean }
   | { t: 'rtc'; from: string; data: string }
 
 export interface RoomInfo {

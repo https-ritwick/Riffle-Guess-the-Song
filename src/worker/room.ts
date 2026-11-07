@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers'
 import { pickAwardNames, type AwardName } from '../shared/awards'
-import { CHAT_BURST, CHAT_HISTORY, CHAT_REFILL_MS, sanitizeChat, type ChatMessage, type VoiceState } from '../shared/chat'
+import { CHAT_BURST, CHAT_HISTORY, CHAT_REFILL_MS, replySnapshot, sanitizeChat, type ChatMessage, type ChatReceipts, type VoiceState } from '../shared/chat'
 import { findPreset } from '../shared/catalog'
 import { dailySettings, seededRandom } from '../shared/daily'
 import { buildChallengeQuestions, CHALLENGE_QUESTION, summarize, type ChallengeItem, type ChallengePrompt, type GameKind } from '../shared/challenges'
@@ -200,6 +200,8 @@ interface Attachment {
   lastChat?: number
   /** Chat messages this connection may still send right away (refills over time). */
   chatBudget?: number
+  /** Last "typing…" ping relayed for this connection. */
+  lastTyping?: number
   user: SessionIdentity | null
   member: boolean
   geo?: PlayerGeo | null
@@ -275,6 +277,8 @@ export class GameRoom extends DurableObject<Env> {
   private artCache = new Map<string, string | null>()
   /** Recent chat messages (kept under their own key so answers don't rewrite them). */
   private chat: ChatMessage[] = []
+  /** How far each player has received and read the chat (for the sent / delivered / read ticks). */
+  private receipts: ChatReceipts = {}
   /** Voice relay rate limiting, per player: packets in the current second. */
   private voiceRate = new Map<string, { second: number; n: number }>()
   /** The admin can switch AI off site-wide; each new connection brings the current setting. */
@@ -317,6 +321,7 @@ export class GameRoom extends DurableObject<Env> {
       }
       this.ai = (await ctx.storage.get<AiStore>('ai')) ?? { ready: {}, seen: {} }
       this.chat = (await ctx.storage.get<ChatMessage[]>('chat')) ?? []
+      this.receipts = (await ctx.storage.get<ChatReceipts>('chatReceipts')) ?? {}
     })
     // Keep-alive pings are answered without waking the object from hibernation.
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'))
@@ -426,6 +431,7 @@ export class GameRoom extends DurableObject<Env> {
     this.room = null
     this.blend = {}
     this.chat = []
+    this.receipts = {}
     return true
   }
 
@@ -535,6 +541,7 @@ export class GameRoom extends DurableObject<Env> {
         this.room = null
         this.blend = {}
         this.chat = []
+        this.receipts = {}
         return
       }
       // Nobody is watching: don't keep cycling through rounds.
@@ -616,6 +623,7 @@ export class GameRoom extends DurableObject<Env> {
           return false
         }
         ws.serializeAttachment({ ...att, lastChat: now, chatBudget: budget - 1 } satisfies Attachment)
+        const quoted = msg.replyTo ? this.chat.find((m) => m.id === msg.replyTo) : undefined
         const message: ChatMessage = {
           id: newId(),
           from: player.id,
@@ -624,12 +632,40 @@ export class GameRoom extends DurableObject<Env> {
           photo: player.photo,
           at: now,
           ...(msg.sticker ? { sticker: msg.sticker } : { text }),
+          ...(quoted ? { replyTo: replySnapshot(quoted) } : {}),
           ...(msg.cid ? { cid: msg.cid } : {}),
         }
         this.chat = [...this.chat.slice(-(CHAT_HISTORY - 1)), message]
         this.activity().chats += 1
         this.broadcastRaw({ t: 'chat', message })
-        await this.ctx.storage.put('chat', this.chat)
+        // Everyone connected has it now; the sender has obviously read it.
+        for (const pid of new Set(this.connectedSockets().map((s) => this.attachment(s).pid))) {
+          if (pid) this.receiptOf(pid).delivered = now
+        }
+        this.receiptOf(player.id).read = now
+        this.broadcastRaw({ t: 'receipts', receipts: this.receipts })
+        await this.ctx.storage.put({ chat: this.chat, chatReceipts: this.receipts })
+        return false
+      }
+
+      case 'typing': {
+        if (room.solo || att.off?.includes('chat')) return false
+        if (msg.on && now - (att.lastTyping ?? 0) < 1_000) return false
+        ws.serializeAttachment({ ...att, lastTyping: msg.on ? now : 0 } satisfies Attachment)
+        const data: ServerMessage = { t: 'typing', from: player.id, on: msg.on }
+        for (const s of this.connectedSockets()) if (this.attachment(s).pid !== player.id) this.send(s, data)
+        return false
+      }
+
+      case 'seen': {
+        const latest = this.chat.at(-1)?.at ?? 0
+        const r = this.receiptOf(player.id)
+        const at = Math.min(msg.at, latest)
+        if (at <= r.read) return false
+        r.read = at
+        r.delivered = Math.max(r.delivered, at)
+        this.broadcastRaw({ t: 'receipts', receipts: this.receipts })
+        await this.ctx.storage.put('chatReceipts', this.receipts)
         return false
       }
 
@@ -866,7 +902,18 @@ export class GameRoom extends DurableObject<Env> {
 
     ws.serializeAttachment({ ...att, pid: player.id } satisfies Attachment)
     this.send(ws, { t: 'welcome', you: player.id, token: player.token })
-    if (!room.solo) this.send(ws, { t: 'chatHistory', messages: this.chat })
+    if (!room.solo) {
+      // Everything said so far reaches this player now. (Someone new only counts for what's said after they arrived.)
+      const r = this.receiptOf(player.id, player.joinedAt)
+      const latest = this.chat.at(-1)?.at ?? 0
+      const changed = r.delivered < latest
+      r.delivered = Math.max(r.delivered, latest)
+      this.send(ws, { t: 'chatHistory', messages: this.chat, receipts: this.receipts })
+      if (changed) {
+        this.broadcastRaw({ t: 'receipts', receipts: this.receipts })
+        void this.ctx.storage.put('chatReceipts', this.receipts)
+      }
+    }
     return true
   }
 
@@ -1904,6 +1951,11 @@ export class GameRoom extends DurableObject<Env> {
   private attachment(ws: WebSocket): Attachment {
     const a = ws.deserializeAttachment() as Partial<Attachment> | null
     return { ...a, pid: a?.pid ?? null, lastReaction: a?.lastReaction ?? 0, lastChat: a?.lastChat ?? 0, user: a?.user ?? null, member: a?.member ?? false }
+  }
+
+  /** A player's chat receipt, started when they're first seen in the chat. */
+  private receiptOf(pid: string, since = Date.now()) {
+    return (this.receipts[pid] ??= { since, delivered: 0, read: 0 })
   }
 
   private connectedSockets(): WebSocket[] {

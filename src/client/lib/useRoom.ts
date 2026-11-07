@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CHAT_HISTORY, type ChatMessage } from '../../shared/chat'
+import { CHAT_HISTORY, replySnapshot, TYPING_TTL_MS, type ChatMessage, type ChatReceipts } from '../../shared/chat'
 import type { ClientMessage, PublicState, RoomInfo, ServerMessage, Settings, Source } from '../../shared/protocol'
 import { load, remove, save } from './storage'
 
@@ -86,6 +86,10 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null)
   const [chat, setChat] = useState<ChatMessage[]>([])
   const [chatRejected, setChatRejected] = useState<ChatRejection | null>(null)
+  const [receipts, setReceipts] = useState<ChatReceipts>({})
+  /** Players typing in the chat right now. */
+  const [typing, setTyping] = useState<string[]>([])
+  const typingTimers = useRef(new Map<string, number>())
   /** Goes up every time the server seats us (first join and every reconnect). */
   const [seat, setSeat] = useState(0)
   const rtcHandler = useRef<((from: string, data: string) => void) | null>(null)
@@ -113,6 +117,7 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
         const cid = chatCid()
         const me = stateRef.current?.players.find((p) => p.id === youRef.current)
         if (me) {
+          const quoted = msg.replyTo ? chatRef.current.find((m) => m.id === msg.replyTo) : undefined
           const local: ChatMessage = {
             id: `local:${cid}`,
             cid,
@@ -123,6 +128,7 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
             photo: me.photo,
             at: Date.now() + offsetRef.current,
             ...(msg.sticker ? { sticker: msg.sticker } : { text: msg.text ?? '' }),
+            ...(quoted ? { replyTo: replySnapshot(quoted) } : {}),
           }
           setChat((c) => [...c.slice(-(CHAT_HISTORY - 1)), local])
           window.setTimeout(() => setChat((c) => (c.some((m) => m.pending && m.cid === cid) ? c.map((m) => (m.pending && m.cid === cid ? { ...m, pending: false } : m)) : c)), CHAT_PENDING_MS)
@@ -152,6 +158,15 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
       if (!name) return
       const token = load(tokenKey(code)) ?? undefined
       sendRaw({ t: 'join', name, token })
+    }
+
+    /** Show (or stop showing) someone as typing; it fades out by itself if their pings stop. */
+    const setTypist = (pid: string, on: boolean) => {
+      const timers = typingTimers.current
+      window.clearTimeout(timers.get(pid))
+      timers.delete(pid)
+      if (on) timers.set(pid, window.setTimeout(() => setTypist(pid, false), TYPING_TTL_MS))
+      setTyping((t) => (on ? (t.includes(pid) ? t : [...t, pid]) : t.includes(pid) ? t.filter((x) => x !== pid) : t))
     }
 
     const onMessage = (ev: MessageEvent) => {
@@ -188,9 +203,18 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
           break
         case 'chatHistory':
           setChat(msg.messages)
+          setReceipts(msg.receipts ?? {})
+          break
+        case 'receipts':
+          setReceipts(msg.receipts)
+          break
+        case 'typing':
+          setTypist(msg.from, msg.on)
           break
         case 'chat': {
           const m = msg.message
+          // Their message arrived: they're done typing it.
+          setTypist(m.from, false)
           setChat((c) => {
             if (c.some((x) => x.id === m.id)) return c
             // Our own message coming back: swap it in where it already shows.
@@ -309,6 +333,8 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
       clearTimeout(retryTimer)
       clearInterval(heartbeat)
       document.removeEventListener('visibilitychange', onVisible)
+      for (const t of typingTimers.current.values()) clearTimeout(t)
+      typingTimers.current.clear()
       wsRef.current?.close(1000, 'Leaving')
       wsRef.current = null
     }
@@ -350,5 +376,5 @@ export function useRoom(code: string, opts: { display?: boolean } = {}) {
     rtcHandler.current = fn
   }, [])
 
-  return { status, state, you, error, reactions, suggestion, chat, chatRejected, seat, onRtc, onRelay, sendBinary, send: sendRaw, join, leave, serverNow, wantsSeat: nameRef.current !== null }
+  return { status, state, you, error, reactions, suggestion, chat, chatRejected, receipts, typing, seat, onRtc, onRelay, sendBinary, send: sendRaw, join, leave, serverNow, wantsSeat: nameRef.current !== null }
 }

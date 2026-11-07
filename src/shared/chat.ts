@@ -96,6 +96,24 @@ export function isEmojiOnly(text: string): boolean {
   return /^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|‍|️)+$/u.test(t) && !/^[\d#*]+$/.test(t)
 }
 
+/** How much of the quoted message a reply carries. */
+export const REPLY_SNIPPET_LENGTH = 120
+/** Someone's "typing…" fades out this long after their last keystroke ping. */
+export const TYPING_TTL_MS = 6_000
+/** While you keep typing, the room is reminded this often. */
+export const TYPING_PING_MS = 3_000
+/** You stop showing as typing after this long without a keystroke. */
+export const TYPING_IDLE_MS = 4_000
+
+/** The message a reply quotes (a copy, so it still shows once the original scrolls out of history). */
+export interface ChatReply {
+  id: string
+  from: string
+  name: string
+  text?: string
+  sticker?: StickerId
+}
+
 export interface ChatMessage {
   id: string
   /** Player id of the sender (they may have left since). */
@@ -106,10 +124,49 @@ export interface ChatMessage {
   at: number
   text?: string
   sticker?: StickerId
+  /** The message this one replies to. */
+  replyTo?: ChatReply
   /** The sender's own id for the message (matches the copy their screen showed while sending). */
   cid?: string
   /** Only on the sender's screen: not confirmed by the room yet. */
   pending?: boolean
+}
+
+export function replySnapshot(m: ChatMessage): ChatReply {
+  return {
+    id: m.id,
+    from: m.from,
+    name: m.name,
+    ...(m.sticker ? { sticker: m.sticker } : { text: (m.text ?? '').slice(0, REPLY_SNIPPET_LENGTH) }),
+  }
+}
+
+/**
+ * Per player: in the room's chat since `since`, has received messages up to
+ * `delivered` and read them up to `read` (both are message times).
+ */
+export interface ChatReceipt {
+  since: number
+  delivered: number
+  read: number
+}
+export type ChatReceipts = Record<string, ChatReceipt>
+
+/** Like WhatsApp's ticks: sending (clock), sent (one tick), delivered (two grey), read (two blue). */
+export type TickState = 'pending' | 'sent' | 'delivered' | 'read'
+
+/** Who a message went to: everyone else in the room when it was sent. */
+export function recipientsOf(m: Pick<ChatMessage, 'from' | 'at'>, receipts: ChatReceipts, players: readonly { id: string }[]): string[] {
+  return players.filter((p) => p.id !== m.from && (receipts[p.id]?.since ?? Infinity) <= m.at).map((p) => p.id)
+}
+
+export function tickState(m: Pick<ChatMessage, 'from' | 'at' | 'pending' | 'id'>, receipts: ChatReceipts, players: readonly { id: string }[]): TickState {
+  if (m.pending || m.id.startsWith('local:')) return 'pending'
+  const to = recipientsOf(m, receipts, players)
+  if (!to.length) return 'sent'
+  if (to.every((id) => receipts[id]!.read >= m.at)) return 'read'
+  if (to.every((id) => receipts[id]!.delivered >= m.at)) return 'delivered'
+  return 'sent'
 }
 
 /** In the voice channel: listening with the mic muted, or talking. */
