@@ -205,7 +205,7 @@ export const VinylStage = memo(function VinylStage({ round, spinning }: { round:
   const owners = round.reveal?.owners ?? []
   return (
     <div className="flex flex-row items-center gap-4 sm:gap-5 xl:flex-col xl:items-start">
-      <div className="relative h-28 w-38 shrink-0 sm:h-44 sm:w-60">
+      <div className="dark-island relative h-28 w-38 shrink-0 sm:h-44 sm:w-60">
         {/* Record */}
         <div
           className={clsx(
@@ -319,7 +319,7 @@ export function ChallengeStage({ round, now }: { round: PublicRound; now: number
   }
   return (
     <div className="space-y-4">
-      <div className="film-strip relative overflow-hidden rounded-2xl bg-black/45 px-5 py-7 ring-1 ring-white/10 sm:px-6" data-testid="challenge-prompt">
+      <div className="dark-island film-strip relative overflow-hidden rounded-2xl bg-black/45 px-5 py-7 ring-1 ring-white/10 sm:px-6" data-testid="challenge-prompt">
         <span className="absolute top-2.5 left-4 text-[10px] font-bold tracking-[0.3em] text-brand-200/80 uppercase">
           {c.kind === 'dialogue' ? 'Dialogue' : c.kind === 'quote' ? 'Who said it?' : c.kind === 'emoji' ? 'Emoji song' : 'Clues'}
         </span>
@@ -841,7 +841,7 @@ export function GameView() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-6">
         <div className="min-w-0">
           <div className="game-card relative overflow-hidden rounded-3xl border border-white/10 p-3.5 shadow-2xl sm:p-7">
-            {shownRound.reveal?.track.artwork && <img src={shownRound.reveal.track.artwork} alt="" aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-20 blur-3xl" />}
+            {shownRound.reveal?.track.artwork && <img src={shownRound.reveal.track.artwork} alt="" aria-hidden="true" className="cover-glow pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-20 blur-3xl" />}
             {phase === 'countdown' && <CountdownOverlay round={round} now={now} />}
             {outcome?.kind === 'right' && <StreakHype streak={me?.streak ?? 0} round={round.index} />}
 

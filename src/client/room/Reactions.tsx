@@ -24,7 +24,7 @@ export function Reactions({ reactions, players }: { reactions: Reaction[]; playe
             <span className="drop-shadow-[0_6px_14px_rgba(0,0,0,0.55)]" style={{ fontSize: `${size}rem`, lineHeight: 1 }}>
               {r.emoji}
             </span>
-            {name && <span className="mt-1 rounded-full bg-black/70 px-2 py-0.5 text-xs font-semibold text-white ring-1 ring-white/10">{name}</span>}
+            {name && <span className="mt-1 rounded-full bg-black/70 px-2 py-0.5 text-xs font-semibold text-snow ring-1 ring-white/10">{name}</span>}
           </div>
         )
       })}
@@ -93,7 +93,7 @@ export function ReactionBar({ compact, className }: { compact?: boolean; classNa
         {open ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
       </button>
       {open && (
-        <div className="absolute bottom-full left-1/2 z-50 mb-2 w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 animate-pop rounded-2xl border border-white/10 bg-[#1a0f27]/95 p-2 shadow-2xl backdrop-blur-xl">
+        <div className="absolute bottom-full left-1/2 z-50 mb-2 w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 animate-pop rounded-2xl border border-white/10 bg-panel/95 p-2 shadow-2xl backdrop-blur-xl">
           <div className="grid grid-cols-8 gap-1">
             {REACTIONS.map((emoji) => (
               <button

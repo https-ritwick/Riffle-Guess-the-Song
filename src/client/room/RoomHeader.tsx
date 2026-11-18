@@ -1,6 +1,6 @@
 import { LogOut, Volume2, VolumeX } from 'lucide-react'
 import { useNavigate } from 'react-router'
-import { LogoMark } from '../components/ui'
+import { LogoMark, ThemeToggle } from '../components/ui'
 import { UserMenu } from '../components/UserMenu'
 import { player, usePlayer } from '../lib/audio'
 import { useRoomContext } from './context'
@@ -54,6 +54,7 @@ export function RoomHeader() {
           {state.code}
         </span>
         <SoundControl />
+        <ThemeToggle />
         <span className="hidden md:block">
           <UserMenu />
         </span>

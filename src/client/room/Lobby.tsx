@@ -72,7 +72,7 @@ function InviteCard() {
         <Button variant="dark" size="sm" icon={<QrCode className="h-4 w-4" />} onClick={() => setShowQr((v) => !v)} aria-label="Show QR code" aria-pressed={showQr} />
       </div>
       {showQr && (
-        <div className="mt-4 flex justify-center rounded-xl bg-white p-3">
+        <div className="mt-4 flex justify-center rounded-xl bg-snow p-3">
           <img src={qrSrc} alt={`QR code to join room ${state.code}`} className="h-44 w-44 [image-rendering:pixelated]" />
         </div>
       )}
@@ -533,7 +533,7 @@ function StartBar() {
   const host = state.players.find((p) => p.id === state.hostId)
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-800 bg-black/90 p-4 backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0">
+    <div className="fixed inset-x-0 bottom-0 z-20 border-t border-gray-800 bg-night/90 p-4 backdrop-blur lg:static lg:border-0 lg:bg-transparent lg:p-0">
       {isHost ? (
         <Button
           variant="gradient"
@@ -701,7 +701,7 @@ function ChallengeCard() {
         </div>
         <div className="space-y-2" aria-hidden="true">
           {(SAMPLES[mode.id] ?? []).map((x, i) => (
-            <div key={i} className="film-strip rounded-xl bg-black/50 px-4 py-4 ring-1 ring-white/10" style={{ transform: `rotate(${i ? 1.5 : -1.5}deg)` }}>
+            <div key={i} className="dark-island film-strip rounded-xl bg-black/50 px-4 py-4 ring-1 ring-white/10" style={{ transform: `rotate(${i ? 1.5 : -1.5}deg)` }}>
               <p className="text-[10px] font-bold tracking-[0.25em] text-gray-400 uppercase">{x.label}</p>
               <p className="mt-1 font-serif text-lg text-amber-50 italic">{x.body}</p>
             </div>

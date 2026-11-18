@@ -65,11 +65,12 @@ function dayLabel(at: number) {
 }
 
 /** Like WhatsApp groups, everyone's name has its own colour. */
-const NAME_COLORS = ['#53bdeb', '#fc9775', '#25d366', '#ffd279', '#e26ab6', '#06cf9c', '#a78bfa', '#ff72a1', '#ffbc38', '#42c7b8', '#d88deb', '#a5b337']
+/** The palette lives in styles.css (--chat-name-0…11) so each theme gets readable shades. */
+const NAME_COLOR_COUNT = 12
 export function nameColor(id: string) {
   let h = 0
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0
-  return NAME_COLORS[Math.abs(h) % NAME_COLORS.length]!
+  return `var(--chat-name-${Math.abs(h) % NAME_COLOR_COUNT})`
 }
 
 function snippet(r: { text?: string; sticker?: StickerId }) {
@@ -84,8 +85,8 @@ function typingText(names: string[]) {
   return `${names[0]}, ${names[1]} and ${others} other${others === 1 ? '' : 's'} are typing…`
 }
 
-const BUBBLE_MINE = '#4b2a73'
-const BUBBLE_THEIRS = '#2b1e3d'
+const BUBBLE_MINE = 'var(--color-bubble-mine)'
+const BUBBLE_THEIRS = 'var(--color-raised)'
 
 /** The little notch on the first bubble of a run. */
 function Tail({ mine }: { mine: boolean }) {
@@ -241,7 +242,7 @@ const Message = memo(function Message({
         )}
         <span className="relative pt-1 pb-2">
           {m.sticker ? <StickerArt id={m.sticker} /> : <span className="block px-1 text-4xl leading-tight">{m.text}</span>}
-          <span className="absolute right-0 bottom-0 flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-px text-[10.5px] text-white/85">{meta}</span>
+          <span className="absolute right-0 bottom-0 flex items-center gap-1 rounded-full bg-black/55 px-1.5 py-px text-[10.5px] text-snow/85">{meta}</span>
         </span>
       </div>
     )
@@ -329,7 +330,7 @@ function TypingBubble({ players }: { players: PublicPlayer[] }) {
       <span className="relative w-7 shrink-0">
         <PlayerAvatar avatar={p.avatar} photo={p.photo} name={p.name} size="sm" />
         {players.length > 1 && (
-          <span className="absolute -right-1 -bottom-1 rounded-full bg-gray-800 px-1 text-[9px] font-bold text-white ring-2 ring-[#1a0f27]">+{players.length - 1}</span>
+          <span className="absolute -right-1 -bottom-1 rounded-full bg-gray-800 px-1 text-[9px] font-bold text-white ring-2 ring-panel">+{players.length - 1}</span>
         )}
       </span>
       <span className="relative flex items-center gap-1 rounded-xl rounded-tl-none px-3.5 py-3" style={{ background: BUBBLE_THEIRS }}>
@@ -406,7 +407,7 @@ const MessageList = memo(function MessageList({
           <Fragment key={key}>
             {newDay && (
               <li className="my-2 flex justify-center pt-1" aria-hidden="true">
-                <span className="rounded-lg bg-[#2b1e3d] px-3 py-1 text-[11.5px] font-medium text-gray-300 shadow-sm">{dayLabel(m.at)}</span>
+                <span className="rounded-lg bg-raised px-3 py-1 text-[11.5px] font-medium text-gray-300 shadow-sm">{dayLabel(m.at)}</span>
               </li>
             )}
             {divider && (
@@ -458,7 +459,7 @@ function MessageInfo({ m, you, receipts, players }: { m: ChatMessage; you: strin
       </section>
     )
   return (
-    <div className="absolute inset-0 z-10 flex flex-col overflow-y-auto bg-[#1a0f27] p-3" data-testid="chat-info">
+    <div className="absolute inset-0 z-10 flex flex-col overflow-y-auto bg-panel p-3" data-testid="chat-info">
       <ul className="pointer-events-none mb-4 rounded-2xl bg-black/25 px-3 pt-1 pb-3">
         <Message m={m} you={you} first ticks={tickState(m, receipts, players)} actions={NO_ACTIONS} />
       </ul>
@@ -839,7 +840,7 @@ export function ChatDock({
         <section
           className={clsx(
             // Solid, not frosted: a blur over the ticking game behind it makes phones stutter.
-            'fixed right-3 z-50 flex w-[min(23rem,calc(100vw-1.5rem))] animate-pop flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#1a0f27] shadow-2xl sm:right-5',
+            'fixed right-3 z-50 flex w-[min(23rem,calc(100vw-1.5rem))] animate-pop flex-col overflow-hidden rounded-3xl border border-white/10 bg-panel shadow-2xl sm:right-5',
             raised ? 'bottom-40 h-[min(32rem,calc(100dvh-12rem))] lg:bottom-24 lg:h-[min(34rem,calc(100dvh-8rem))]' : 'bottom-24 h-[min(34rem,calc(100dvh-8rem))]',
           )}
           aria-label="Room chat"
@@ -1035,7 +1036,7 @@ export function ChatDock({
           onClick={openChat}
           className={clsx(
             // Phones: above the dock. Wider screens: beside it, clear of the page's buttons.
-            'fixed right-3 z-40 flex max-w-[min(18rem,calc(100vw-1.5rem))] animate-pop items-center gap-2 rounded-2xl rounded-br-md border border-white/10 bg-[#1a0f27] py-2 pr-3 pl-2 text-left shadow-xl sm:right-[12.5rem]',
+            'fixed right-3 z-40 flex max-w-[min(18rem,calc(100vw-1.5rem))] animate-pop items-center gap-2 rounded-2xl rounded-br-md border border-white/10 bg-panel py-2 pr-3 pl-2 text-left shadow-xl sm:right-[12.5rem]',
             raised ? 'bottom-40 sm:bottom-24 lg:bottom-5' : 'bottom-24 sm:bottom-5',
           )}
         >
@@ -1049,7 +1050,7 @@ export function ChatDock({
 
       <div
         className={clsx(
-          'fixed right-3 z-40 flex items-center gap-1.5 rounded-full border border-white/10 bg-[#1a0f27]/95 p-1.5 shadow-xl sm:right-5',
+          'fixed right-3 z-40 flex items-center gap-1.5 rounded-full border border-white/10 bg-panel/95 p-1.5 shadow-xl sm:right-5',
           raised ? 'bottom-24 lg:bottom-5' : 'bottom-5',
         )}
         data-testid="chat-dock"
@@ -1101,7 +1102,7 @@ export function ChatDock({
         >
           <MessageCircle className="h-5 w-5" />
           {unread > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-bold text-white" data-testid="chat-unread">
+            <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[11px] font-bold text-snow" data-testid="chat-unread">
               {unread > 9 ? '9+' : unread}
             </span>
           )}

@@ -28,7 +28,7 @@ function JoinQr({ code, size = 8 }: { code: string; size?: number }) {
     qr.make()
     return qr.createDataURL(size, 2)
   }, [url, size])
-  return <img src={src} alt={`QR code to join room ${code}`} className="h-full w-full rounded-2xl bg-white p-2 [image-rendering:pixelated]" />
+  return <img src={src} alt={`QR code to join room ${code}`} className="h-full w-full rounded-2xl bg-snow p-2 [image-rendering:pixelated]" />
 }
 
 function TopBar({ state }: { state: PublicState }) {
@@ -366,7 +366,7 @@ export default function TvPage() {
               setReady(true)
               void document.documentElement.requestFullscreen?.().catch(() => undefined)
             }}
-            className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-5 bg-black/80 backdrop-blur"
+            className="dark-island absolute inset-0 z-20 flex flex-col items-center justify-center gap-5 bg-black/80 backdrop-blur"
             data-testid="tv-start"
           >
             <span className="flex h-28 w-28 items-center justify-center rounded-full bg-linear-to-br from-brand-300 to-rose-500 text-black">

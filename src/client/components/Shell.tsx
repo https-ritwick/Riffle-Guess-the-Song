@@ -6,7 +6,7 @@ import { useAuth } from '../lib/auth'
 import { useSite } from '../lib/site'
 import { load, save } from '../lib/storage'
 import { Footer } from './Footer'
-import { LogoMark } from './ui'
+import { LogoMark, ThemeToggle } from './ui'
 import { UserMenu } from './UserMenu'
 import { BRAND } from '../../shared/brand'
 
@@ -27,6 +27,7 @@ export function TopNav() {
             <Users className="h-4 w-4" /> <span className="hidden sm:inline">Groups</span>
           </Link>
         )}
+        <ThemeToggle />
         <UserMenu />
       </nav>
     </header>

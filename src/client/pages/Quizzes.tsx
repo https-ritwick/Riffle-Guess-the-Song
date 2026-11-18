@@ -35,7 +35,7 @@ function QuizCard({ quiz }: { quiz: QuizSummary }) {
         <Cover images={quiz.cover ? [quiz.cover] : []} size="fill" label={quiz.title} />
         <span className="absolute top-1.5 left-1.5 rounded-lg bg-black/70 px-1.5 py-0.5 text-lg leading-none">{quiz.emoji}</span>
         {quiz.visibility === 'unlisted' && (
-          <span className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-gray-200">
+          <span className="absolute top-1.5 right-1.5 inline-flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-bold text-snow/85">
             <Lock className="h-3 w-3" /> Link only
           </span>
         )}
@@ -246,7 +246,7 @@ function SongRow({ track, playing, onPlay, onRemove, onAdd, added }: { track: Tr
     <li className="flex items-center gap-3 rounded-xl bg-white/[0.03] px-2.5 py-2">
       <button type="button" onClick={onPlay} aria-label={playing ? 'Stop preview' : `Preview ${track.title}`} className="relative shrink-0">
         <Cover images={track.artwork ? [track.artwork] : []} size="sm" label={track.title} />
-        <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 text-white">{playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}</span>
+        <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/40 text-snow">{playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 fill-current" />}</span>
       </button>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-semibold text-white">{track.title}</span>
@@ -496,7 +496,7 @@ export function QuizBuilderPage() {
             )}
           </Card>
         </div>
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-[#0d0716]/95 p-3 backdrop-blur">
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-white/10 bg-night/95 p-3 backdrop-blur">
           <div className="mx-auto flex max-w-5xl items-center gap-3">
             {error ? (
               <p role="alert" className="min-w-0 flex-1 text-sm text-red-300">

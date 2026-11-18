@@ -79,7 +79,7 @@ function Tile({
     >
       <span className="relative">
         <Cover images={images} size="fill" label={title} />
-        {badge && <span className="absolute top-1.5 left-1.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-white uppercase">{badge}</span>}
+        {badge && <span className="absolute top-1.5 left-1.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-snow uppercase">{badge}</span>}
         {selected && (
           <span className="absolute right-1.5 bottom-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-brand-500 text-black shadow-lg">
             <Check className="h-4 w-4" />

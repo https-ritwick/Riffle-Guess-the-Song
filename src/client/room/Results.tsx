@@ -81,8 +81,8 @@ function AlbumWall({ covers }: { covers: string[] }) {
           ))}
         </div>
       </div>
-      <div className="absolute inset-0 bg-linear-to-r from-[#0d0716] via-[#0d0716]/85 to-[#0d0716]/40" />
-      <div className="absolute inset-0 bg-linear-to-t from-[#0d0716] via-transparent to-[#0d0716]/40" />
+      <div className="absolute inset-0 bg-linear-to-r from-night via-night/85 to-night/40" />
+      <div className="absolute inset-0 bg-linear-to-t from-night via-transparent to-night/40" />
     </div>
   )
 }
@@ -564,7 +564,7 @@ export function Results() {
                 type="button"
                 onClick={share}
                 data-testid="share-open"
-                className="mt-5 inline-flex h-12 items-center gap-2 rounded-2xl bg-linear-to-r from-[#f58529] via-[#dd2a7b] to-[#8134af] px-5 font-extrabold text-white shadow-lg shadow-rose-600/30 transition hover:-translate-y-0.5 hover:brightness-110"
+                className="mt-5 inline-flex h-12 items-center gap-2 rounded-2xl bg-linear-to-r from-[#f58529] via-[#dd2a7b] to-[#8134af] px-5 font-extrabold text-snow shadow-lg shadow-rose-600/30 transition hover:-translate-y-0.5 hover:brightness-110"
               >
                 <Share2 className="h-5 w-5" /> Share to Story, Status & more
               </button>

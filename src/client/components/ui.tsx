@@ -1,8 +1,9 @@
 import clsx from 'clsx'
-import { Loader2, Music2 } from 'lucide-react'
+import { Loader2, Moon, Music2, Sun } from 'lucide-react'
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react'
 import { forwardRef } from 'react'
 import { BRAND } from '../../shared/brand'
+import { toggleTheme, useTheme } from '../lib/theme'
 import { AVATARS } from '../../shared/rules'
 
 export function LogoMark({ className }: { className?: string }) {
@@ -36,6 +37,24 @@ export function Logo({ size = 'lg' }: { size?: 'sm' | 'lg' }) {
   )
 }
 
+/** Sun/moon button that flips between the dark and light themes. */
+export function ThemeToggle({ className }: { className?: string }) {
+  const theme = useTheme()
+  const next = theme === 'light' ? 'dark' : 'light'
+  return (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      aria-label={`Switch to ${next} theme`}
+      title={`Switch to ${next} theme`}
+      data-testid="theme-toggle"
+      className={clsx('rounded-lg p-2 text-gray-300 transition hover:bg-gray-800 hover:text-white', className)}
+    >
+      {theme === 'light' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+    </button>
+  )
+}
+
 type Variant = 'white' | 'gradient' | 'dark' | 'danger'
 
 const VARIANTS: Record<Variant, string> = {
@@ -43,7 +62,7 @@ const VARIANTS: Record<Variant, string> = {
   gradient:
     'bg-linear-to-r from-brand-300 via-brand-500 to-rose-500 text-black font-bold shadow-lg shadow-rose-500/25 hover:brightness-110 hover:shadow-rose-500/40 active:scale-[0.98]',
   dark: 'bg-white/[0.06] border border-white/10 text-white font-semibold hover:bg-white/[0.1] hover:border-white/20',
-  danger: 'bg-red-600/90 text-white font-semibold hover:bg-red-600',
+  danger: 'bg-red-600/90 text-snow font-semibold hover:bg-red-600',
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -235,7 +254,7 @@ export function Toggle({ checked, onChange, disabled, label, hint }: { checked: 
           checked ? 'bg-brand-500' : 'bg-gray-700',
         )}
       >
-        <span className={clsx('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform', checked ? 'translate-x-5' : 'translate-x-0.5')} />
+        <span className={clsx('absolute top-0.5 h-5 w-5 rounded-full bg-snow shadow transition-transform', checked ? 'translate-x-5' : 'translate-x-0.5')} />
       </button>
     </label>
   )

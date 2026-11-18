@@ -120,7 +120,7 @@ export default function AdminApp() {
   }, [])
   return (
     <Gate>
-      <div className="min-h-dvh bg-[#0d0716] text-white">
+      <div className="dark-island min-h-dvh bg-[#0d0716] text-white">
         <Sidebar />
         <main className="px-4 py-6 sm:px-6 lg:ml-60 lg:px-8 lg:py-8">
           <div className="mx-auto max-w-7xl">

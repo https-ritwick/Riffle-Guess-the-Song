@@ -320,7 +320,7 @@ export function ShareSheet({ data, onClose }: { data: ShareData; onClose: () => 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center" role="dialog" aria-label="Share your result" data-testid="share-sheet" onClick={onClose}>
       <div
-        className="max-h-[94dvh] w-full max-w-3xl overflow-y-auto rounded-t-3xl border border-white/10 bg-[#170b22] p-5 shadow-2xl sm:rounded-3xl"
+        className="max-h-[94dvh] w-full max-w-3xl overflow-y-auto rounded-t-3xl border border-white/10 bg-panel p-5 shadow-2xl sm:rounded-3xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -366,7 +366,7 @@ export function ShareSheet({ data, onClose }: { data: ShareData; onClose: () => 
                   data-testid={`share-${t.id}`}
                   className="group flex items-center gap-3 rounded-2xl bg-white/[0.04] p-2.5 text-left ring-1 ring-white/10 transition hover:-translate-y-0.5 hover:bg-white/[0.08]"
                 >
-                  <span className={clsx('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br text-lg font-black text-white shadow-lg', t.tone)}>{t.icon}</span>
+                  <span className={clsx('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br text-lg font-black text-snow shadow-lg', t.tone)}>{t.icon}</span>
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-bold text-white">{t.label}</span>
                     <span className="block truncate text-xs text-gray-400">{t.sub}</span>

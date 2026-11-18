@@ -103,7 +103,7 @@ function InvitePanel({ group, reload }: { group: GroupDetail; reload: () => Prom
             )}
           </div>
           {showQr && qr && (
-            <div className="mb-4 flex justify-center rounded-xl bg-white p-3">
+            <div className="mb-4 flex justify-center rounded-xl bg-snow p-3">
               <img src={qr} alt="QR code for the invite link" className="h-44 w-44 [image-rendering:pixelated]" />
             </div>
           )}

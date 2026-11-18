@@ -17,6 +17,13 @@
   --color-brand-900: #78330c;
 
   --color-night: #0d0716;
+  /* Surfaces above the night sky: game cards, panels/modals, raised chips & chat bubbles. */
+  --color-surface: #140b1f;
+  --color-panel: #1a0f27;
+  --color-raised: #2b1e3d;
+  --color-bubble-mine: #4b2a73;
+  /* Never remapped by the light theme: text on solid colour fills and photos. */
+  --color-snow: #ffffff;
 
   --animate-float-up: float-up 2.6s ease-out forwards;
   --animate-reaction: reaction-rise 3s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
@@ -40,10 +47,128 @@
   }
 }
 
+/* ---- Light theme --------------------------------------------------------
+   The UI is written dark-first (text-white, bg-white/5, text-gray-400 …). Rather
+   than doubling every class, the light theme remaps the tokens those classes
+   read: "white" becomes plum ink (so white tints become ink tints), the gray
+   scale is mirrored, and the night sky becomes warm cream. Pale accent text
+   (brand-300, emerald-300 …) is deepened so it stays readable on cream.
+   Wrap anything that must stay dark (vinyl, photos, the recap story) in
+   .dark-island. */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --color-white: #24122f;
+  --color-night: #fbf5ee;
+  --color-surface: #ffffff;
+  --color-panel: #ffffff;
+  --color-raised: #f3eaf4;
+  --color-bubble-mine: #f6dcc0;
+
+  --color-gray-50: oklch(14% 0.03 310);
+  --color-gray-100: oklch(21% 0.035 310);
+  --color-gray-200: oklch(28% 0.035 310);
+  --color-gray-300: oklch(37% 0.035 310);
+  --color-gray-400: oklch(45% 0.03 310);
+  --color-gray-500: oklch(52% 0.025 310);
+  --color-gray-600: oklch(68% 0.02 310);
+  --color-gray-700: oklch(85% 0.014 310);
+  --color-gray-800: oklch(92% 0.01 310);
+  --color-gray-900: oklch(96% 0.008 310);
+  --color-gray-950: oklch(98.5% 0.004 310);
+
+  --chat-name-0: #0e7fb5;
+  --chat-name-1: #c4532c;
+  --chat-name-2: #138a43;
+  --chat-name-3: #a86a00;
+  --chat-name-4: #b3348a;
+  --chat-name-5: #048a67;
+  --chat-name-6: #6d4fd6;
+  --chat-name-7: #c92d68;
+  --chat-name-8: #b16b00;
+  --chat-name-9: #13867a;
+  --chat-name-10: #9c3fb8;
+  --chat-name-11: #6b7a12;
+}
+:root {
+  --chat-name-0: #53bdeb;
+  --chat-name-1: #fc9775;
+  --chat-name-2: #25d366;
+  --chat-name-3: #ffd279;
+  --chat-name-4: #e26ab6;
+  --chat-name-5: #06cf9c;
+  --chat-name-6: #a78bfa;
+  --chat-name-7: #ff72a1;
+  --chat-name-8: #ffbc38;
+  --chat-name-9: #42c7b8;
+  --chat-name-10: #d88deb;
+  --chat-name-11: #a5b337;
+}
+
+/* Restores the dark tokens inside a light page. */
+:root[data-theme='light'] .dark-island {
+  color-scheme: dark;
+  --color-white: #ffffff;
+  --color-night: #0d0716;
+  --color-surface: #140b1f;
+  --color-panel: #1a0f27;
+  --color-raised: #2b1e3d;
+  --color-bubble-mine: #4b2a73;
+  --color-gray-50: oklch(98.5% 0.002 247.839);
+  --color-gray-100: oklch(96.7% 0.003 264.542);
+  --color-gray-200: oklch(92.8% 0.006 264.531);
+  --color-gray-300: oklch(87.2% 0.01 258.338);
+  --color-gray-400: oklch(70.7% 0.022 261.325);
+  --color-gray-500: oklch(55.1% 0.027 264.364);
+  --color-gray-600: oklch(44.6% 0.03 256.802);
+  --color-gray-700: oklch(37.3% 0.034 259.733);
+  --color-gray-800: oklch(27.8% 0.033 256.848);
+  --color-gray-900: oklch(21% 0.034 264.665);
+  --color-gray-950: oklch(13% 0.028 261.692);
+}
+
+@layer base {
+  :root[data-theme='light'] .dark-island {
+    color: var(--color-white);
+  }
+}
+
+/* Pale accent text, deepened on cream. */
+@layer utilities {
+  :root[data-theme='light'] :is(.text-brand-50, .text-brand-100, .text-brand-200):not(.dark-island, .dark-island *) { color: var(--color-brand-800); }
+  :root[data-theme='light'] :is(.text-brand-300, .text-brand-400):not(.dark-island, .dark-island *) { color: var(--color-brand-700); }
+  :root[data-theme='light'] :is(.text-amber-50, .text-amber-100, .text-amber-200, .text-yellow-100, .text-yellow-200):not(.dark-island, .dark-island *) { color: var(--color-amber-800); }
+  :root[data-theme='light'] :is(.text-amber-300, .text-amber-400, .text-yellow-300):not(.dark-island, .dark-island *) { color: var(--color-amber-700); }
+  :root[data-theme='light'] :is(.text-emerald-100, .text-emerald-200, .text-emerald-300, .text-emerald-400):not(.dark-island, .dark-island *) { color: var(--color-emerald-700); }
+  :root[data-theme='light'] :is(.text-red-200, .text-red-300, .text-red-400):not(.dark-island, .dark-island *) { color: var(--color-red-700); }
+  :root[data-theme='light'] :is(.text-rose-100, .text-rose-200, .text-rose-300, .text-rose-400, .text-pink-400):not(.dark-island, .dark-island *) { color: var(--color-rose-700); }
+  :root[data-theme='light'] :is(.text-sky-100, .text-sky-300, .text-sky-400):not(.dark-island, .dark-island *) { color: var(--color-sky-700); }
+  :root[data-theme='light'] :is(.text-orange-200, .text-orange-300, .text-orange-400):not(.dark-island, .dark-island *) { color: var(--color-orange-700); }
+  :root[data-theme='light'] :is(.text-fuchsia-100, .text-fuchsia-200, .text-fuchsia-300, .text-fuchsia-400):not(.dark-island, .dark-island *) { color: var(--color-fuchsia-700); }
+  :root[data-theme='light'] :is(.text-violet-100, .text-violet-300):not(.dark-island, .dark-island *) { color: var(--color-violet-700); }
+
+  /* Recessed wells (bg-black/20–35) read as soft plum tints instead of grey smudges. */
+  :root[data-theme='light'] :is(.bg-black\/20, .bg-black\/25, .bg-black\/30, .bg-black\/35):not(.dark-island, .dark-island *) { background-color: rgb(80 30 90 / 0.06); }
+  :root[data-theme='light'] .hover\:bg-black\/35:hover:not(.dark-island, .dark-island *) { background-color: rgb(80 30 90 / 0.1); }
+
+  /* The blurred album art behind a reveal: dark covers would grey out a light card. */
+  :root[data-theme='light'] .cover-glow { opacity: 0.35; mix-blend-mode: color; }
+
+  /* Gradient headline text: swap its pale stops for deeper ones. */
+  :root[data-theme='light'] .bg-clip-text:not(.dark-island, .dark-island *) {
+    --color-brand-100: var(--color-brand-600);
+    --color-brand-200: var(--color-brand-600);
+    --color-brand-300: var(--color-brand-600);
+    --color-brand-400: var(--color-brand-600);
+    --color-rose-300: var(--color-rose-600);
+    --color-rose-400: var(--color-rose-600);
+    --color-fuchsia-200: var(--color-fuchsia-700);
+  }
+}
+
 @layer base {
   html {
     color-scheme: dark;
-    background: #0d0716;
+    background: var(--color-night);
   }
   body {
     @apply bg-night font-sans text-white antialiased;
@@ -115,12 +240,24 @@
     radial-gradient(120% 80% at 100% 100%, rgb(232 51 109 / 0.13), transparent 55%),
     rgb(20 11 31 / 0.92);
 }
+:root[data-theme='light'] .game-card:not(.dark-island, .dark-island *) {
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgb(255 174 31 / 0.12), transparent 55%),
+    radial-gradient(120% 80% at 100% 100%, rgb(232 51 109 / 0.09), transparent 55%),
+    rgb(255 255 255 / 0.94);
+  box-shadow: 0 24px 60px -36px rgb(90 30 80 / 0.45);
+}
 
 /* Glass panels with a hairline gradient border. */
 .glass {
   background: linear-gradient(180deg, rgb(255 255 255 / 0.055), rgb(255 255 255 / 0.02));
   border: 1px solid rgb(255 255 255 / 0.09);
   box-shadow: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 20px 50px -30px rgb(0 0 0 / 0.8);
+}
+:root[data-theme='light'] .glass:not(.dark-island, .dark-island *) {
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.92), rgb(255 255 255 / 0.74));
+  border-color: rgb(80 30 90 / 0.1);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 20px 50px -32px rgb(90 30 80 / 0.35);
 }
 .ring-marquee {
   position: relative;
@@ -159,6 +296,9 @@
 .film-grain {
   background-image: repeating-radial-gradient(circle at 17% 32%, rgb(255 255 255 / 0.025) 0 1px, transparent 1px 3px);
 }
+:root[data-theme='light'] .film-grain {
+  background-image: repeating-radial-gradient(circle at 17% 32%, rgb(80 30 90 / 0.025) 0 1px, transparent 1px 3px);
+}
 
 /* Film-strip edges for challenge prompts. */
 .film-strip {
@@ -168,6 +308,10 @@
   background-size: 18px 14px;
   background-repeat: repeat-x;
   background-position: 0 4px, 0 calc(100% - 4px);
+}
+
+:root[data-theme='light'] .film-strip {
+  background-color: rgb(28 14 40 / 0.92);
 }
 
 /* A vinyl record: grooves, sheen and a dark rim. */

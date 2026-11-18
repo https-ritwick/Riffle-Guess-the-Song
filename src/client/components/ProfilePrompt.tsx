@@ -38,7 +38,7 @@ export function ProfileDialog({ onClose }: { onClose?: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="profile-title" data-testid="profile-dialog">
-      <form onSubmit={submit} noValidate className="w-full max-w-md animate-pop rounded-3xl border border-white/10 bg-[#1a0f27] p-6 shadow-2xl">
+      <form onSubmit={submit} noValidate className="w-full max-w-md animate-pop rounded-3xl border border-white/10 bg-panel p-6 shadow-2xl">
         <Sparkles className="mb-3 h-7 w-7 text-brand-400" />
         <h2 id="profile-title" className="text-2xl font-bold text-white">
           {first ? `Welcome to ${BRAND.name}${me ? `, ${me.name.split(' ')[0]}` : ''}!` : 'Your profile'}

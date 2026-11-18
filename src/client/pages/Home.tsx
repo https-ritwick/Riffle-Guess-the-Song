@@ -131,7 +131,7 @@ function ModeShowcase() {
               </span>
               <p className="text-lg font-black text-white">{m.title}</p>
               <p className="mt-1 text-sm text-gray-300">{m.how}</p>
-              <p className="film-strip mt-4 truncate rounded-xl bg-black/40 px-3 py-3 text-center font-serif text-amber-50 italic ring-1 ring-white/10" aria-hidden="true">
+              <p className="dark-island film-strip mt-4 truncate rounded-xl bg-black/40 px-3 py-3 text-center font-serif text-amber-50 italic ring-1 ring-white/10" aria-hidden="true">
                 {samples[m.id]}
               </p>
             </div>

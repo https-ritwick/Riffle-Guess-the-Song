@@ -92,7 +92,7 @@ export function Recap({ slides, onClose }: { slides: Slide[]; onClose: () => voi
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-[#0d0716] select-none" role="dialog" aria-label="Game recap" data-testid="recap">
+    <div className="dark-island fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-[#0d0716] select-none" role="dialog" aria-label="Game recap" data-testid="recap">
       {slide.art ? (
         <img key={slide.key + 'bg'} src={slide.art} alt="" aria-hidden="true" className="rise-in absolute inset-0 h-full w-full scale-125 object-cover opacity-40 blur-3xl" />
       ) : (
