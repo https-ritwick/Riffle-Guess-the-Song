@@ -54,6 +54,11 @@ export function cookie(name: string, value: string, url: URL, maxAgeSeconds: num
   return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`
 }
 
+/** Set-Cookie that ends this browser's sign-in. */
+export function clearSessionCookie(url: URL): string {
+  return cookie(SESSION_COOKIE, '', url, 0)
+}
+
 export function safeReturnTo(raw: string | null): string {
   if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.includes('\\')) return '/'
   return raw.slice(0, 300)

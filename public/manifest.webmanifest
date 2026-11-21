@@ -1,14 +1,30 @@
 {
+  "id": "/",
   "name": "Riffle — Name the song before your friends do",
   "short_name": "Riffle",
   "description": "The free guess-the-song party game. Play solo, with friends, or blend everyone's Spotify.",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0d0716",
   "theme_color": "#0d0716",
+  "categories": ["games", "music", "entertainment"],
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
     { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "screenshots": [
+    { "src": "/screenshots/home-phone.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "Pick a game mode and start playing" },
+    { "src": "/screenshots/modes-phone.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow", "label": "Party, solo, daily challenge and more" },
+    { "src": "/screenshots/home-wide.png", "sizes": "1920x1080", "type": "image/png", "form_factor": "wide", "label": "Riffle on a big screen" }
+  ],
+  "shortcuts": [
+    { "name": "Music quizzes", "short_name": "Quizzes", "url": "/quizzes", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "My groups", "short_name": "Groups", "url": "/groups", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
   ]
 }

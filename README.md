@@ -321,6 +321,10 @@ Then open `/api/ai/health` on your site: it reports whether the key works and wh
 | iTunes Search API, Apple/Spotify preview CDNs, Spotify embed & oEmbed | songs, previews, artwork, playlists | Free, no keys |
 | Google Gemini API (optional) | AI challenge questions and award names | Free tier, then pay per use |
 
+## Android app (Google Play)
+
+Riffle ships to Play as a Trusted Web Activity in [`android/`](android/): a thin shell around the live site, so `npm run deploy` updates the app too. Building the signed `.aab`, `assetlinks.json`, and the Play Console checklist are covered in [ANDROID.md](ANDROID.md).
+
 ## Security notes
 
 - **Room messages:** every WebSocket message is schema-validated, size-limited, and checked for host rights where needed.

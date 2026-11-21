@@ -23,6 +23,7 @@ const QuizPage = lazy(() => import('./pages/Quizzes').then((m) => ({ default: m.
 const QuizBuilderPage = lazy(() => import('./pages/Quizzes').then((m) => ({ default: m.QuizBuilderPage })))
 const TvPage = lazy(() => import('./pages/TvPage'))
 const PrivacyPage = lazy(() => import('./pages/Legal').then((m) => ({ default: m.PrivacyPage })))
+const DeleteAccountPage = lazy(() => import('./pages/Legal').then((m) => ({ default: m.DeleteAccountPage })))
 
 const loading = (
   <div className="min-h-dvh bg-night pt-24">
@@ -51,6 +52,7 @@ createRoot(document.getElementById('root')!).render(
                   <Route path="/tv/:code" element={<TvPage />} />
                   <Route path="/terms" element={<TermsPage />} />
                   <Route path="/privacy" element={<PrivacyPage />} />
+                  <Route path="/delete-account" element={<DeleteAccountPage />} />
                   <Route path="/admin/*" element={<AdminApp />} />
                   <Route path="*" element={<Home />} />
                 </Routes>

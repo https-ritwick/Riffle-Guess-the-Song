@@ -7,3 +7,10 @@
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Digital Asset Links for the Android (Trusted Web Activity) app. Android re-checks
+# this on install/update, so keep it short-lived and readable from any origin.
+/.well-known/assetlinks.json
+  Content-Type: application/json
+  Cache-Control: public, max-age=300
+  Access-Control-Allow-Origin: *

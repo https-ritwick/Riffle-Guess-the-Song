@@ -1,7 +1,9 @@
-// Renders the link-preview image (public/og.png) and home-screen icons with the
-// locally installed Edge/Chrome. Run: node scripts/build-og.mjs
+// Renders the link-preview image (public/og.png), home-screen icons (including the
+// maskable PWA icons) and the Android app's launcher, splash and Play Store graphics
+// with the locally installed Edge/Chrome. Run: node scripts/build-og.mjs
 import { chromium } from '@playwright/test'
-import { readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const font = readFileSync(fileURLToPath(new URL('../node_modules/@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2', import.meta.url))).toString('base64')
@@ -40,18 +42,53 @@ const og = `${base}
 const icon = (size) => `${base}<div style="width:${size}px;height:${size}px;background:#07060d;display:flex;align-items:center;justify-content:center">
   <div style="width:${Math.round(size * 0.86)}px;height:${Math.round(size * 0.86)}px">${LOGO}</div></div>`
 
+// Maskable icons: full-bleed background, logo kept inside the 80% safe-zone circle.
+const maskable = (size) => `${base}<div style="width:${size}px;height:${size}px;background:#07060d;display:flex;align-items:center;justify-content:center">
+  <div style="width:${Math.round(size * 0.72)}px;height:${Math.round(size * 0.72)}px">${LOGO}</div></div>`
+
+// Android: transparent canvas with the logo at `scale` of its width (adaptive-icon
+// foregrounds use 108dp canvases with a 66dp safe zone, so scale ≈ 0.6 there).
+const logoOnly = (size, scale) => `${base}<style>body{background:transparent}</style><div style="width:${size}px;height:${size}px;display:flex;align-items:center;justify-content:center">
+  <div style="width:${Math.round(size * scale)}px;height:${Math.round(size * scale)}px">${LOGO}</div></div>`
+
+const feature = `${base}
+<div style="position:relative;width:1024px;height:500px;overflow:hidden;background:#07060d">
+  <div style="position:absolute;width:600px;height:600px;left:-180px;top:-260px;border-radius:50%;background:#8b5cf6;opacity:.35;filter:blur(110px)"></div>
+  <div style="position:absolute;width:520px;height:520px;right:-120px;bottom:-260px;border-radius:50%;background:#12dcef;opacity:.25;filter:blur(110px)"></div>
+  <div style="position:absolute;right:-110px;top:40px;width:440px;height:440px;opacity:.95">${LOGO}</div>
+  <div style="position:absolute;left:64px;top:96px;display:flex;align-items:center;gap:18px">
+    <div style="width:80px;height:80px">${LOGO}</div>
+    <div style="font-size:78px;font-weight:800;letter-spacing:-2px">Riffle</div>
+  </div>
+  <div style="position:absolute;left:64px;top:230px;width:560px;font-size:54px;font-weight:800;line-height:1.05;background:linear-gradient(90deg,#fff,#cdfbfd 60%,#ddd6fe);-webkit-background-clip:text;color:transparent">Name the song before your friends do.</div>
+</div>`
+
+const RES = 'android/app/src/main/res'
+const DENSITIES = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 }
+const android = Object.entries(DENSITIES).flatMap(([d, k]) => [
+  [`${RES}/mipmap-${d}/ic_launcher.png`, logoOnly(48 * k, 0.92), 48 * k, 48 * k, true],
+  [`${RES}/mipmap-${d}/ic_launcher_foreground.png`, logoOnly(108 * k, 0.6), 108 * k, 108 * k, true],
+  [`${RES}/drawable-${d}/splash.png`, logoOnly(150 * k, 1), 150 * k, 150 * k, true],
+])
+
 const browser = await chromium.launch({ channel: process.env.PW_CHANNEL ?? 'msedge' })
 const shots = [
   ['public/og.png', og, 1200, 630],
   ['public/apple-touch-icon.png', icon(180), 180, 180],
   ['public/icon-512.png', icon(512), 512, 512],
   ['public/icon-192.png', icon(192), 192, 192],
+  ['public/icon-maskable-512.png', maskable(512), 512, 512],
+  ['public/icon-maskable-192.png', maskable(192), 192, 192],
+  ['android/store/feature-graphic.png', feature, 1024, 500],
+  ['android/store/icon-512.png', icon(512), 512, 512],
+  ...android,
 ]
-for (const [path, html, width, height] of shots) {
+for (const [path, html, width, height, transparent] of shots) {
+  mkdirSync(dirname(path), { recursive: true })
   const page = await browser.newPage({ viewport: { width, height } })
   await page.setContent(html)
   await page.evaluate(() => document.fonts.ready)
-  await page.screenshot({ path, clip: { x: 0, y: 0, width, height } })
+  await page.screenshot({ path, clip: { x: 0, y: 0, width, height }, omitBackground: !!transparent })
   await page.close()
   console.log('wrote', path)
 }

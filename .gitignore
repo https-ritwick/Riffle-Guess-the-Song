@@ -33,3 +33,21 @@ coverage
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Android (Trusted Web Activity in android/). Signing keys and their passwords must
+# never be committed; see ANDROID.md, section "Signing".
+android/.gradle
+android/build
+android/app/build
+android/app/release
+android/local.properties
+android/keystore.properties
+android/keystore/
+android/.idea
+android/.kotlin
+android/captures
+*.jks
+*.keystore
+*.aab
+*.apk
+*.apks

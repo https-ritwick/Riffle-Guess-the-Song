@@ -177,17 +177,29 @@ async function userDetail(env: Env, id: string): Promise<AdminUserDetail | null>
   }
 }
 
-/** Erase an account for good: their groups are handed on (or removed when empty) and their name is scrubbed from game history. */
-async function purgeUser(env: Env, id: string): Promise<void> {
+/**
+ * Erase an account for good: their groups are handed on (or removed when empty), their quizzes,
+ * sessions and pending invites go, their name is scrubbed from game history and analytics are
+ * unlinked. Used by the admin console and by players deleting their own account.
+ */
+export async function purgeUser(env: Env, id: string): Promise<void> {
+  const account = await env.DB.prepare('SELECT email FROM users WHERE id = ?').bind(id).first<{ email: string }>()
+  if (!account) return
   const { results: groups } = await env.DB.prepare('SELECT g.* FROM groups g JOIN group_members m ON m.group_id = g.id WHERE m.user_id = ?').bind(id).all<GroupRow>()
   for (const g of groups) await removeMember(env, g, id)
   // Groups they own but aren't a member of (shouldn't happen, but owner_id must not dangle).
   await env.DB.prepare('DELETE FROM groups WHERE owner_id = ?').bind(id).run()
   await env.DB.batch([
-    env.DB.prepare('DELETE FROM group_invites WHERE invited_by = ?').bind(id),
-    env.DB.prepare("UPDATE game_players SET name = 'Deleted player' WHERE user_id = ?").bind(id),
-    env.DB.prepare("UPDATE game_participants SET name = 'Deleted player' WHERE user_id = ?").bind(id),
-    env.DB.prepare("UPDATE daily_scores SET name = 'Deleted player' WHERE user_id = ?").bind(id),
+    env.DB.prepare('DELETE FROM group_invites WHERE invited_by = ? OR email = ?').bind(id, account.email.toLowerCase()),
+    env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(id),
+    env.DB.prepare('DELETE FROM quizzes WHERE owner_id = ?').bind(id),
+    // Spelled out rather than left to ON DELETE SET NULL, so nothing depends on foreign keys being enforced.
+    env.DB.prepare("UPDATE game_players SET name = 'Deleted player', user_id = NULL WHERE user_id = ?").bind(id),
+    env.DB.prepare("UPDATE game_participants SET name = 'Deleted player', user_id = NULL WHERE user_id = ?").bind(id),
+    env.DB.prepare("UPDATE daily_scores SET name = 'Deleted player', user_id = NULL WHERE user_id = ?").bind(id),
+    env.DB.prepare('UPDATE visitors SET user_id = NULL WHERE user_id = ?').bind(id),
+    env.DB.prepare('UPDATE visits SET user_id = NULL WHERE user_id = ?').bind(id),
+    env.DB.prepare('UPDATE rooms_log SET user_id = NULL WHERE user_id = ?').bind(id),
     env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id),
   ])
 }

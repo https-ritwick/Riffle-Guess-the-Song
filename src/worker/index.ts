@@ -1,5 +1,6 @@
 import { dailyGame, dailyNumber, msUntilNextDaily, type DailyBoard } from '../shared/daily'
 import { DEFAULT_SETTINGS, GameKindSchema, ROOM_CODE_RE } from '../shared/protocol'
+import { handleAccount } from './account'
 import { aiHealth } from './ai'
 import { handleAdmin } from './admin'
 import { geoOf, handleTrack, logRoom, purgeOldData, siteConfig } from './analytics'
@@ -186,6 +187,8 @@ export default {
 
     // Cookie-authenticated writes must come from our own pages.
     if (request.method !== 'GET' && request.method !== 'HEAD' && !sameOrigin(request, url)) {
+      // Drain the body first: answering with it unread breaks the next request through the local dev proxy.
+      await request.arrayBuffer().catch(() => null)
       return json({ error: 'Forbidden origin' }, 403)
     }
 
@@ -193,7 +196,10 @@ export default {
       if (pathname === '/api/config' && request.method === 'GET') return json(await siteConfig(env))
       if (pathname === '/api/track' && request.method === 'POST') {
         const { success } = await env.CONNECT_LIMITER.limit({ key: `track:${clientKey(request)}` })
-        if (!success) return json({ ok: true, counted: false })
+        if (!success) {
+          await request.arrayBuffer().catch(() => null)
+          return json({ ok: true, counted: false })
+        }
         return await handleTrack(request, env, url, await getSessionUser(request, env))
       }
       const switched = await featureSwitches(request, env, pathname)
@@ -202,6 +208,7 @@ export default {
         (await handleRooms(request, env, url)) ??
         (await handlePlaylist(request, env, url, ctx)) ??
         (await handleSpotify(request, env, url, clientKey(request))) ??
+        (await handleAccount(request, env, url)) ??
         (await handleAuth(request, env, url)) ??
         (await handleAdmin(request, env, url, await getSessionUser(request, env))) ??
         (await handleQuizzes(request, env, url, await getSessionUser(request, env))) ??

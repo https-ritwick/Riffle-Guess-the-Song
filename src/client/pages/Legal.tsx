@@ -1,12 +1,16 @@
 // Terms of Service and Privacy Policy.
 import { useEffect, useState, type ReactNode } from 'react'
+import { Trash2 } from 'lucide-react'
 import { Link } from 'react-router'
 import { BRAND } from '../../shared/brand'
+import { DeleteAccountDialog } from '../components/DeleteAccount'
 import { Shell } from '../components/Shell'
-import { Toggle } from '../components/ui'
+import { Button, Toggle } from '../components/ui'
+import { SignInButton } from '../components/UserMenu'
+import { useAuth } from '../lib/auth'
 import { analyticsEnabled, browserBlocksAnalytics, setAnalyticsEnabled } from '../lib/track'
 
-const UPDATED = '25 October 2026'
+const UPDATED = '21 November 2026'
 const MAIL = <a href={`mailto:${BRAND.email}`} className="text-brand-300 underline-offset-2 hover:underline">{BRAND.email}</a>
 
 function Doc({ title, intro, toc, children }: { title: string; intro: ReactNode; toc: { id: string; label: string }[]; children: ReactNode }) {
@@ -38,7 +42,16 @@ function Doc({ title, intro, toc, children }: { title: string; intro: ReactNode;
           <article className="max-w-3xl space-y-10 text-[15px] leading-relaxed text-gray-300">{children}</article>
         </div>
         <p className="mt-14 border-t border-white/5 pt-6 text-sm text-gray-500">
-          See also: {title.startsWith('Terms') ? <Link to="/privacy" className="text-brand-300 hover:underline">Privacy Policy</Link> : <Link to="/terms" className="text-brand-300 hover:underline">Terms of Service</Link>}
+          See also:{' '}
+          {title === 'Privacy Policy' ? (
+            <Link to="/terms" className="text-brand-300 hover:underline">
+              Terms of Service
+            </Link>
+          ) : (
+            <Link to="/privacy" className="text-brand-300 hover:underline">
+              Privacy Policy
+            </Link>
+          )}
         </p>
       </main>
     </Shell>
@@ -145,7 +158,13 @@ export function PrivacyPage() {
           <li>We run our own cookie-free analytics to see how {BRAND.name} is used — which pages, game modes and songs are popular, and roughly where players are (country, region, city).</li>
           <li>We never store your IP address, never sell your data and never show ads.</li>
           <li>You can switch analytics off below, and we honour your browser’s Global Privacy Control / Do Not Track signal automatically.</li>
-          <li>Email {MAIL} to see, correct or delete your data.</li>
+          <li>
+            Delete your account any time from the account menu (<em>Delete account</em>) — see{' '}
+            <Link to="/delete-account" className="text-brand-300 underline-offset-2 hover:underline">
+              how to delete your account
+            </Link>
+            . Email {MAIL} to see or correct your data.
+          </li>
         </List>
         <AnalyticsSwitch />
       </Section>
@@ -283,7 +302,14 @@ export function PrivacyPage() {
         <List>
           <li>Rooms, including their chat, are deleted 6 hours after the last activity.</li>
           <li>Visit-level analytics are deleted automatically after about 13 months.</li>
-          <li>Game stats and your account stay until you ask us to delete your account. Game records left after deletion show “Deleted player” instead of your name.</li>
+          <li>
+            Game stats and your account stay until you delete your account (or ask us to). Deletion is immediate; game records left afterwards show “Deleted player” instead of your name.
+            Details:{' '}
+            <Link to="/delete-account" className="text-brand-300 underline-offset-2 hover:underline">
+              Delete your account
+            </Link>
+            .
+          </li>
           <li>Sign-in sessions last 30 days. Spotify data is kept until you disconnect or it expires.</li>
           <li>We keep a short record of moderation actions (like a ban) to prevent repeat abuse.</li>
         </List>
@@ -294,7 +320,11 @@ export function PrivacyPage() {
           <li>Switch analytics off with the toggle at the top of this page, or send Global Privacy Control / Do Not Track from your browser.</li>
           <li>Play without signing in, and disconnect Spotify from the account menu at any time.</li>
           <li>
-            Email {MAIL} to get a copy of your data, correct it, or delete your account. We’ll reply within 30 days. Depending on where you live (for example under India’s Digital Personal Data
+            Delete your account yourself from the account menu, or follow the steps on our{' '}
+            <Link to="/delete-account" className="text-brand-300 underline-offset-2 hover:underline">
+              account deletion page
+            </Link>
+            . Email {MAIL} to get a copy of your data, correct it, or have us delete your account for you. We’ll reply within 30 days. Depending on where you live (for example under India’s Digital Personal Data
             Protection Act or the EU/UK GDPR) you may also have rights to object, restrict processing, nominate someone to act for you, or complain to a regulator.
           </li>
         </List>
@@ -444,6 +474,126 @@ export function TermsPage() {
         <p>
           These Terms are governed by the laws of India, and the courts of India have jurisdiction. We may update these Terms; we’ll change the date at the top, and for significant changes show a
           notice in the game. Continuing to play after a change means you accept it. Questions: {MAIL}.
+        </p>
+      </Section>
+    </Doc>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Public account-deletion page (linked from the Privacy Policy and the Google Play listing).
+
+const DELETE_TOC = [
+  { id: 'in-app', label: 'Delete in the app' },
+  { id: 'by-email', label: 'Ask us by email' },
+  { id: 'deleted', label: 'What gets deleted' },
+  { id: 'kept', label: 'What’s kept, and for how long' },
+]
+
+function DeleteNow() {
+  const { me, loading } = useAuth()
+  const [open, setOpen] = useState(false)
+  if (loading) return null
+  return (
+    <div className="rounded-2xl border border-red-400/20 bg-red-400/[0.05] p-4" data-testid="delete-account-panel">
+      {me ? (
+        <>
+          <p className="mb-3 text-sm text-gray-300">
+            You’re signed in as <strong className="text-white">{me.email}</strong>.
+          </p>
+          <Button variant="danger" icon={<Trash2 className="h-4 w-4" />} onClick={() => setOpen(true)} className="w-full sm:w-auto">
+            Delete my account
+          </Button>
+          {open && <DeleteAccountDialog onClose={() => setOpen(false)} />}
+        </>
+      ) : (
+        <>
+          <p className="mb-3 text-sm text-gray-300">Sign in with the Google account you use for {BRAND.name}, and you’ll come back here to delete it.</p>
+          <div className="max-w-sm">
+            <SignInButton returnTo="/delete-account" label="Sign in to delete your account" />
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+export function DeleteAccountPage() {
+  return (
+    <Doc
+      title="Delete your account"
+      toc={DELETE_TOC}
+      intro={
+        <p>
+          You can delete your {BRAND.name} account (made with Google sign-in) at any time, from the app or by email. {BRAND.name} is made by {BRAND.author}. Deleting your account doesn’t
+          affect your Google account. You can still play as a guest afterwards.
+        </p>
+      }
+    >
+      <Section id="in-app" title="Delete in the app">
+        <ol className="list-decimal space-y-1.5 pl-5 marker:text-brand-400">
+          <li>Open {BRAND.name} (the app or the website) and sign in with Google.</li>
+          <li>Tap your name or photo at the top right to open the account menu.</li>
+          <li>
+            Tap <strong className="text-gray-100">Delete account</strong>, type <strong className="font-mono text-gray-100">DELETE</strong> to confirm, then tap{' '}
+            <strong className="text-gray-100">Delete account</strong> again.
+          </li>
+        </ol>
+        <p>Your account is deleted straight away and you’re signed out on every device. You can also start right here:</p>
+        <DeleteNow />
+      </Section>
+
+      <Section id="by-email" title="Ask us by email">
+        <p>
+          Can’t sign in, or prefer not to use the app? Email {MAIL} from the email address of your Google account with the subject “Delete my account”. We may ask you to confirm that the account is
+          yours, and we’ll delete it within 30 days (usually much sooner) and reply when it’s done.
+        </p>
+      </Section>
+
+      <Section id="deleted" title="What gets deleted">
+        <List>
+          <li>Your account: Google account ID, name, email address, profile photo, age and gender, sign-in history and the approximate location of your last visit.</li>
+          <li>All your sign-in sessions, on every device.</li>
+          <li>Quizzes you made, and group invites you sent or received.</li>
+          <li>
+            Your group memberships. In groups you run, another member becomes the admin; groups with no other members are deleted along with their game history.
+          </li>
+          <li>
+            The Spotify profile and top tracks saved on the browser you delete from. ({BRAND.name} never stores Spotify passwords or access tokens. A Spotify connection made on another browser isn’t tied
+            to your account — disconnect it from the account menu there, or it’s deleted automatically within 30 days.)
+          </li>
+          <li>The link between your account and our analytics.</li>
+        </List>
+      </Section>
+
+      <Section id="kept" title="What’s kept, and for how long">
+        <List>
+          <li>
+            <strong className="text-gray-100">Past game results and daily-challenge scores</strong> stay so other players’ scoreboards and leaderboards still add up, but they show
+            “Deleted player” instead of your name and are no longer linked to you. They’re kept as long as those records exist.
+          </li>
+          <li>
+            <strong className="text-gray-100">Anonymous analytics</strong> (visits, page views, feature taps), no longer linked to you, are deleted automatically after about 13 months.
+          </li>
+          <li>
+            <strong className="text-gray-100">Live rooms</strong> you were playing in, including their chat, are deleted 6 hours after their last activity.
+          </li>
+          <li>
+            <strong className="text-gray-100">Database backups</strong> held by our host, Cloudflare, roll over and are gone within 30 days.
+          </li>
+          <li>
+            If your account was suspended for breaking the Terms, we keep a short record of that moderation action to prevent repeat abuse.
+          </li>
+          <li>
+            Things stored only in your own browser (such as the name you type, sound settings and progress) stay on your device until you clear your browser data or uninstall the app.
+          </li>
+        </List>
+        <p>
+          More detail is in our{' '}
+          <Link to="/privacy" className="text-brand-300 underline-offset-2 hover:underline">
+            Privacy Policy
+          </Link>
+          . Questions: {MAIL}.
         </p>
       </Section>
     </Doc>

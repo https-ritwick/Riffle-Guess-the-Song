@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { ChevronDown, Loader2, LogIn, LogOut, ShieldCheck, Unlink, UserRound, Users } from 'lucide-react'
+import { ChevronDown, Loader2, LogIn, LogOut, ShieldCheck, Trash2, Unlink, UserRound, Users } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { BRAND } from '../../shared/brand'
@@ -8,6 +8,7 @@ import { trackEvent } from '../lib/track'
 import { connectSpotify, disconnectSpotify, useSpotify } from '../lib/spotify'
 import { SpotifyIcon } from './SpotifyIcon'
 import { useToast } from './Toasts'
+import { DeleteAccountDialog } from './DeleteAccount'
 import { DevLoginDialog } from './DevLogin'
 import { ProfileDialog } from './ProfilePrompt'
 import { UserPhoto } from './ui'
@@ -115,6 +116,7 @@ export function UserMenu() {
   const [open, setOpen] = useState(false)
   const [devOpen, setDevOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const navigate = useNavigate()
 
@@ -196,9 +198,22 @@ export function UserMenu() {
           >
             <LogOut className="h-4 w-4" /> Sign out
           </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false)
+              setDeleteOpen(true)
+            }}
+            className="flex w-full items-center gap-2 border-t border-gray-800 px-4 py-2.5 text-left text-sm text-red-300 hover:bg-red-500/10"
+            data-testid="delete-account"
+          >
+            <Trash2 className="h-4 w-4" /> Delete account
+          </button>
         </div>
       )}
       {profileOpen && <ProfileDialog onClose={() => setProfileOpen(false)} />}
+      {deleteOpen && <DeleteAccountDialog onClose={() => setDeleteOpen(false)} />}
     </div>
   )
 }

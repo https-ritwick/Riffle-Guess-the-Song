@@ -118,6 +118,13 @@ async function linkFor(request: Request, env: Env): Promise<{ hash: string; row:
   return row ? { hash, row } : null
 }
 
+/** Deletes this browser's saved Spotify profile and top tracks; returns the Set-Cookie that clears its link cookie. */
+export async function forgetSpotifyLink(request: Request, env: Env, url: URL): Promise<string> {
+  const token = readCookie(request, LINK_COOKIE)
+  if (token && token.length <= 100) await env.DB.prepare('DELETE FROM spotify_links WHERE token_hash = ?').bind(await sha256(token)).run()
+  return cookie(LINK_COOKIE, '', url, 0)
+}
+
 /** Pull the 30-second preview URL out of a track's public embed page. */
 async function embedPreview(id: string): Promise<string | null> {
   try {
@@ -240,10 +247,8 @@ export async function handleSpotify(request: Request, env: Env, url: URL, client
   }
 
   if (path === '/api/spotify/disconnect' && request.method === 'POST') {
-    const link = await linkFor(request, env)
-    if (link) await env.DB.prepare('DELETE FROM spotify_links WHERE token_hash = ?').bind(link.hash).run()
     const res = json({ ok: true })
-    res.headers.append('Set-Cookie', cookie(LINK_COOKIE, '', url, 0))
+    res.headers.append('Set-Cookie', await forgetSpotifyLink(request, env, url))
     return res
   }
 

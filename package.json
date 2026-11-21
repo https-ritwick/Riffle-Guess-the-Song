@@ -16,7 +16,16 @@
     "covers": "node scripts/build-covers.mjs",
     "og": "node scripts/build-og.mjs",
     "db:migrate:local": "wrangler d1 migrations apply riffle-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply riffle-db --remote"
+    "db:migrate:remote": "wrangler d1 migrations apply riffle-db --remote",
+    "screenshots": "node scripts/build-screenshots.mjs",
+    "android:doctor": "node scripts/android.mjs doctor",
+    "android:keystore": "node scripts/android.mjs keystore",
+    "android:fingerprint": "node scripts/android.mjs fingerprint",
+    "android:assetlinks": "node scripts/android.mjs assetlinks",
+    "android:debug": "node scripts/android.mjs gradle installDebug",
+    "android:apk": "node scripts/android.mjs gradle assembleRelease",
+    "android:bundle": "node scripts/android.mjs gradle clean bundleRelease",
+    "android:clean": "node scripts/android.mjs gradle clean"
   },
   "engines": {
     "node": ">=20"

@@ -37,6 +37,18 @@ export function ageFromBirthYear(birthYear: number | null | undefined, now = new
   return birthYear ? now.getUTCFullYear() - birthYear : null
 }
 
+/** The word a player types to confirm deleting their own account. */
+export const DELETE_CONFIRM_WORD = 'DELETE'
+
+/** Case and surrounding spaces don't matter ("delete " counts); anything else does. */
+export function isDeleteConfirmation(text: unknown): boolean {
+  return typeof text === 'string' && text.trim().toUpperCase() === DELETE_CONFIRM_WORD
+}
+
+export const DeleteAccountSchema = z.object({
+  confirm: z.string().max(40).refine(isDeleteConfirmation, `Type ${DELETE_CONFIRM_WORD} to confirm.`),
+})
+
 export interface AuthConfig {
   google: boolean
   dev: boolean

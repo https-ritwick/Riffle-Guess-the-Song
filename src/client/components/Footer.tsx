@@ -58,6 +58,9 @@ export function Footer() {
         <Link to="/privacy#analytics" className="hover:text-gray-200">
           Cookie-free analytics
         </Link>
+        <Link to="/delete-account" className="hover:text-gray-200">
+          Delete account
+        </Link>
       </nav>
     </footer>
   )

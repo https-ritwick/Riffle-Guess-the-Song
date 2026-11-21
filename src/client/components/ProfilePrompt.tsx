@@ -115,6 +115,6 @@ export function ProfileGate() {
   const { me } = useAuth()
   const { pathname } = useLocation()
   if (!me || (me.age !== null && me.gender !== null)) return null
-  if (pathname === '/privacy' || pathname === '/terms') return null
+  if (pathname === '/privacy' || pathname === '/terms' || pathname === '/delete-account') return null
   return <ProfileDialog />
 }
